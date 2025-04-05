@@ -1,39 +1,64 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import LoadingSpinner from './LoadingSpinner';
 
-export default function SearchBar() {
-  const [query, setQuery] = useState('');
+interface SearchBarProps {
+  initialQuery?: string;
+  onSearch: (query: string) => void;
+  isLoading?: boolean;
+}
 
-  const handleSearch = (e: React.FormEvent) => {
+export default function SearchBar({ initialQuery = '', onSearch, isLoading = false }: SearchBarProps) {
+  const [query, setQuery] = useState(initialQuery);
+
+  // Update local state if initialQuery changes
+  useEffect(() => {
+    setQuery(initialQuery);
+  }, [initialQuery]);
+
+  const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    // TODO: Implement search functionality
-    console.log('Searching for:', query);
+    if (query.trim() && !isLoading) {
+      onSearch(query);
+    }
   };
 
   return (
-    <div className="flex-1 flex flex-col items-center justify-center min-h-[400px]">
-      <div className="text-center mb-16">
-        <p className="text-2xl text-gray-700">Semantic Search on Google Drive</p>
-      </div>
-      
-      <form onSubmit={handleSearch} className="w-1/2 max-w-xl">
-        <div className="relative h-32 flex items-center">
+    <div className="mb-6">
+      <form onSubmit={handleSubmit} className="w-full">
+        <div className="relative flex items-center">
           <input
             type="text"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="What are you looking for?"
-            className="w-full h-24 px-8 text-xl rounded-full border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent shadow-sm"
+            placeholder="Search your Google Drive semantically (e.g., 'passport photo', 'budget spreadsheet from last month')"
+            className="w-full h-16 px-6 pr-24 text-lg rounded-full border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent shadow-sm"
+            disabled={isLoading}
           />
           <button
             type="submit"
-            className="absolute right-4 top-1/2 transform -translate-y-1/2 h-16 px-8 bg-blue-600 text-white rounded-full hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 text-lg"
+            className={`absolute right-2 h-12 px-6 rounded-full text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 text-base font-medium ${
+              isLoading 
+                ? 'bg-blue-400 cursor-not-allowed' 
+                : 'bg-blue-600 hover:bg-blue-700'
+            }`}
+            disabled={isLoading}
           >
-            Search
+            {isLoading ? (
+              <div className="flex items-center">
+                <LoadingSpinner size="sm" color="white" className="-ml-1 mr-2" />
+                Searching...
+              </div>
+            ) : (
+              'Search'
+            )}
           </button>
         </div>
       </form>
+      <div className="mt-2 text-sm text-gray-500 px-2">
+        <p>Try natural language queries like "meeting notes from last week" or "diagram about authentication flow"</p>
+      </div>
     </div>
   );
-} 
+}
