@@ -37,16 +37,18 @@ class DocumentProcessor:
         },
     }
 
-    def __init__(self):
+
+    def __init__(self, drive_service=None):
         """Initialize document processor with file type handlers"""
         self.pdf_reader = PDFReader()
         self.docx_reader = DocxReader()
         self.excel_reader = PandasExcelReader()
         self.image_reader = ImageReader()
 
-        # Set up Google Drive connection
-        self.drive_service = self._setup_drive_connection()
+        # Use provided drive service or create a new one
+        self.drive_service = drive_service or self._setup_drive_connection()
 
+    # Connecting on server side. Remove later
     def _setup_drive_connection(self):
         """
         Set up connection to Google Drive using OAuth2.
