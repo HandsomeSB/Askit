@@ -102,7 +102,12 @@ async def get_auth_url(request: Request):
     # Create OAuth flow with redirect to frontend
     flow = InstalledAppFlow.from_client_secrets_file(
         "credentials.json",
-        scopes=["https://www.googleapis.com/auth/drive.readonly"],
+        scopes=[
+            "openid",
+            "https://www.googleapis.com/auth/drive.readonly",
+            "https://www.googleapis.com/auth/userinfo.profile",
+            "https://www.googleapis.com/auth/userinfo.email"
+        ],
         redirect_uri="http://localhost:3000/auth/callback"  # Frontend URL
     )
     
@@ -130,8 +135,13 @@ async def auth_callback(request: Request, code: str, state: str):
     # Create flow with same redirect URI
     flow = InstalledAppFlow.from_client_secrets_file(
         "credentials.json",
-        scopes=["https://www.googleapis.com/auth/drive.readonly"],
-        redirect_uri="http://localhost:3000/auth/callback"
+        scopes=[
+            "openid",
+            "https://www.googleapis.com/auth/drive.readonly",
+            "https://www.googleapis.com/auth/userinfo.profile",
+            "https://www.googleapis.com/auth/userinfo.email"
+        ],
+        redirect_uri="http://localhost:3000/auth/callback"  # Frontend URL
     )
     
     # Exchange authorization code for tokens
@@ -141,10 +151,21 @@ async def auth_callback(request: Request, code: str, state: str):
         
         # Store credentials in session
         request.session["credentials"] = credentials.to_json()
+
+        # Extract user info
+        user_info_service = build("oauth2", "v2", credentials=credentials)
+        user_info = user_info_service.userinfo().get().execute()
+        
+        # Store user ID and email in session
+        request.session["user_id"] = user_info["id"]
+        request.session["email"] = user_info["email"]
         
         # Generate a session ID for the frontend
         session_id = secrets.token_urlsafe(32)
         request.session["session_id"] = session_id
+
+        print(request.session.get("user_id"))
+        print(request.session.get("email"))
         
         return {"session_id": session_id, "success": True}
     except Exception as e:
@@ -303,7 +324,8 @@ async def check_auth(request: Request):
             return {"authenticated": False}
         
         # Try to parse credentials to verify they're valid
-        credentials = Credentials.from_json(credentials_json)
+        credentials_info = json.loads(credentials_json)
+        credentials = Credentials.from_authorized_user_info(credentials_info)
         
         # Return basic user info
         return {
