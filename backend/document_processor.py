@@ -15,6 +15,39 @@ from llama_index.readers.file.image import ImageReader
 from llama_index.core import Document
 
 
+# This class with process the files and return a list that looks like this:
+# all_documents = [
+#     # From Google Presentation
+#     Document(
+#         text="Slide 1 content...",
+#         metadata={
+#             "file_name": "presentation.pptx",
+#             "file_id": "456def",
+#             "mime_type": "application/vnd.google-apps.presentation",
+#         },
+#     ),
+#     Document(
+#         text="Slide 2 content...",
+#         metadata={
+#             "file_name": "presentation.pptx",
+#             "file_id": "456def",
+#             "mime_type": "application/vnd.google-apps.presentation",
+#         },
+#     ),
+#     # If there were any errors processing a file
+#     Document(
+#         text="Error processing file: [error message]",
+#         metadata={
+#             "file_name": "problematic_file.xyz",
+#             "file_id": "789ghi",
+#             "mime_type": "unknown/type",
+#             "error": "Error message details",
+#         },
+#     ),
+#     # ... more documents from other files
+# ]
+
+
 class DocumentProcessor:
     """
     Process files from Google Drive and convert to LlamaIndex documents.
@@ -54,6 +87,7 @@ class DocumentProcessor:
         Returns:
             Google Drive service object
         """
+
         SCOPES = ["https://www.googleapis.com/auth/drive.readonly"]
         creds = None
 
@@ -117,6 +151,7 @@ class DocumentProcessor:
             print(f"Error building Google Drive service: {str(e)}")
             raise Exception(f"Failed to build Google Drive service: {str(e)}")
 
+    # This function is scanning all the files in a folder and returning a list of dictonaries each representing a file metadata
     def get_files_from_drive(self, folder_id: str) -> List[Dict[str, Any]]:
         """
         Get all files from a Google Drive folder.
@@ -153,6 +188,7 @@ class DocumentProcessor:
 
         return files
 
+    # This function is using the file metadata received from the previous function and using the `file_id` to download the file and return a list of documents
     def process_file(self, file_metadata: Dict[str, Any]) -> List[Document]:
         """
         Process a file from Google Drive based on its mime type.
