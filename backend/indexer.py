@@ -7,7 +7,7 @@ load_dotenv()
 
 from llama_index.core import Document, VectorStoreIndex, StorageContext
 from llama_index.core.indices.loading import load_index_from_storage
-from llama_index.core.node_parser import SentenceSplitter
+from llama_index.core.node_parser import SemanticSplitterNodeParser
 from llama_index.core.storage.storage_context import SimpleVectorStore
 from llama_index.embeddings.openai import OpenAIEmbedding
 
@@ -38,7 +38,7 @@ class DocumentIndexer:
     def __init__(self, persist_dir: str = "./storage"):
         self.persist_dir = persist_dir
         self.embedding_model = OpenAIEmbedding()
-        self.node_parser = SentenceSplitter(chunk_size=1024, chunk_overlap=200)
+        self.node_parser = SemanticSplitterNodeParser(chunk_size=1024, embed_model=self.embedding_model)
 
         os.makedirs(persist_dir, exist_ok=True)
 
@@ -60,23 +60,25 @@ class DocumentIndexer:
     def _enhance_content_with_metadata(self, document: Document) -> Document:
         metadata = document.metadata
         enhanced_content = []
-        MAX_METADATA_LENGTH = 500
+        MAX_METADATA_BLOCK_LENGTH = 800
 
+        meta_lines = []
         for field in EMBEDDING_METADATA:
             if field in metadata and metadata[field]:
                 value = metadata[field]
                 if isinstance(value, list):
                     value = ", ".join(value)
                 value = str(value)
-                if len(value) > MAX_METADATA_LENGTH:
-                    value = value[:MAX_METADATA_LENGTH] + "..."
-                enhanced_content.append(f"{field}: {value}")
+                meta_lines.append(f"{field}: {value}")
 
-        enhanced_content.append("\nContent:")
-        enhanced_content.append(document.text)
+        metadata_text = "\n".join(meta_lines)
+        if len(metadata_text) > MAX_METADATA_BLOCK_LENGTH:
+            metadata_text = metadata_text[:MAX_METADATA_BLOCK_LENGTH] + "..."
+
+        final_text = f"{metadata_text}\n\nContent:\n{document.text}"
 
         return Document(
-            text="\n".join(enhanced_content),
+            text=final_text,
             metadata=document.metadata,
         )
 

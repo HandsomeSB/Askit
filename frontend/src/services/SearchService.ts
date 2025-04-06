@@ -5,14 +5,15 @@ import {
   SessionResponse, 
   AuthUrlResponse, 
   SearchResponse, 
-  VerifySessionResponse ,
-  FileStructureResponse
+  VerifySessionResponse,
+  ProcessFolderResponse,
+  QueryRequest
 } from '../types/types';
 
 class SearchService {
   private baseUrl: string;
 
-  constructor(baseUrl = 'http://localhost:8000/api') {
+  constructor(baseUrl = '/api') {
     this.baseUrl = baseUrl;
   }
 
@@ -30,8 +31,7 @@ class SearchService {
     const response = await fetch(url, {
       ...options,
       headers,
-      credentials: 'include',  // This is crucial - it sends cookies with the request
-      mode: 'cors',  // Explicitly set CORS mode
+      credentials: 'include',
     });
     
     if (!response.ok) {
@@ -39,6 +39,13 @@ class SearchService {
       const error: any = new Error(errorData.message || `Request failed with status ${response.status}`);
       error.status = response.status;
       error.data = errorData;
+      
+      // If unauthorized, redirect to login
+      if (response.status === 401) {
+        window.location.href = '/';
+        throw error;
+      }
+      
       throw error;
     }
     
@@ -58,17 +65,39 @@ class SearchService {
   async handleOAuthCallback(code: string, state: string): Promise<SessionResponse> {
     return this.request<SessionResponse>('/auth/google-callback', {
       method: 'POST',
-      body: JSON.stringify({ "code": code, "state": state }),
+      body: JSON.stringify({ code, state }),
     });
+  }
+
+  /**
+   * Process a Google Drive folder for indexing
+   */
+  async processFolder(folderId: string): Promise<ProcessFolderResponse> {
+    return this.request<ProcessFolderResponse>('/process-folder', {
+      method: 'POST',
+      body: JSON.stringify({ folder_id: folderId }),
+    });
+  }
+
+  /**
+   * Get list of processed folders
+   */
+  async getFolders(): Promise<{ folders: Array<{ id: string; name: string }> }> {
+    return this.request('/folders');
   }
 
   /**
    * Perform semantic search
    */
-  async semanticSearch(query: string): Promise<SearchResponse> {
-    return this.request<SearchResponse>('/search', {
+  async semanticSearch(query: string, folderId?: string): Promise<SearchResponse> {
+    const request: QueryRequest = { query };
+    if (folderId) {
+      request.folder_id = folderId;
+    }
+    
+    return this.request<SearchResponse>('/query', {
       method: 'POST',
-      body: JSON.stringify({ query }),
+      body: JSON.stringify(request),
     });
   }
 

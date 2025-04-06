@@ -34,7 +34,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
 # Add session middleware
 SESSION_SECRET_KEY = os.getenv("SESSION_SECRET_KEY")
 if not SESSION_SECRET_KEY:
@@ -71,7 +70,7 @@ except Exception as e:
 
 class QueryRequest(BaseModel):
     query: str
-    folder_id: str
+    folder_id: Optional[str] = None
 
 
 class QueryResponse(BaseModel):
@@ -300,8 +299,7 @@ async def query(request: Request, query_request: QueryRequest):
             # Pass user ID (session_id) to restrict queries to user's own indices
             answer, sources = query_engine.query(
                 query_request.query, 
-                query_request.folder_id,
-                user_id=session_id
+                query_request.folder_id
             )
             return QueryResponse(answer=answer, sources=sources)
         except Exception as query_error:

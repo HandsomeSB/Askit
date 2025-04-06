@@ -8,9 +8,10 @@ import LoadingSpinner from './LoadingSpinner';
 interface ResultsListProps {
   results: FileResult[];
   isLoading: boolean;
+  answer?: string;
 }
 
-export default function ResultsList({ results, isLoading }: ResultsListProps) {
+export default function ResultsList({ results, isLoading, answer }: ResultsListProps) {
   if (isLoading) {
     return (
       <div className="bg-white rounded-xl shadow-sm p-8 text-center">
@@ -30,8 +31,6 @@ export default function ResultsList({ results, isLoading }: ResultsListProps) {
     );
   }
 
-  // Removed getFileIcon - now using FileIcon component
-
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);
     return date.toLocaleDateString(undefined, {
@@ -43,6 +42,13 @@ export default function ResultsList({ results, isLoading }: ResultsListProps) {
 
   return (
     <div className="bg-white rounded-xl shadow-sm overflow-hidden">
+      {answer && (
+        <div className="p-4 border-b border-gray-100 bg-blue-50">
+          <h2 className="text-lg font-medium text-blue-800 mb-2">Answer</h2>
+          <p className="text-blue-700">{answer}</p>
+        </div>
+      )}
+      
       <h2 className="text-lg font-medium p-4 border-b border-gray-100">Search Results</h2>
       <div className="divide-y divide-gray-100">
         {results.map((result) => (
@@ -67,7 +73,7 @@ export default function ResultsList({ results, isLoading }: ResultsListProps) {
                 {result.matchDetails && (
                   <div className="bg-blue-50 p-2 rounded-md mb-3 text-sm">
                     <p className="text-blue-800">
-                      <span className="font-medium">Matched:</span> {result.matchDetails}
+                      <span className="font-medium">Matched Content:</span> {result.matchDetails}
                     </p>
                   </div>
                 )}

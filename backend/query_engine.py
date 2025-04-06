@@ -125,6 +125,37 @@ class EnhancedQueryEngine:
                 metadata_filters[field] = match.group(1)
                 cleaned_query = cleaned_query.replace(match.group(0), "").strip()
 
+        # --- Keyword mapping: natural terms to file_type filters ---
+        keyword_map = {
+            "images": "image",
+            "pictures": "image",
+            "photos": "image",
+            "videos": "video",
+            "clips": "video",
+            "audio": "audio",
+            "recordings": "audio",
+            "documents": "document",
+            "pdfs": "document",
+            "spreadsheets": "document",
+            "sheets": "document",
+            "excel": "document",
+            "csv": "document",
+            "txt": "document",
+            "markdown": "document",
+            "ppt": "document",
+            "powerpoint": "document",
+            "slides": "document",
+            "slideshow": "document",
+            "slideshows": "document",
+        }
+
+        for word, file_type in keyword_map.items():
+            if word in cleaned_query.lower():
+                metadata_filters["file_type"] = file_type
+                cleaned_query = re.sub(
+                    word, "", cleaned_query, flags=re.IGNORECASE
+                ).strip()
+
         return cleaned_query, metadata_filters
 
     def hybrid_query(
@@ -258,6 +289,7 @@ Please provide a very concise answer that synthesizes information from the relev
                 "score": getattr(node, "score", None),
                 "file_name": node.metadata.get("file_name", "Unknown"),
                 "mime_type": node.metadata.get("mime_type", "Unknown"),
+                "web_view_link": node.metadata.get("web_view_link", "Unknown"),
             }
             for node in results
         ]
