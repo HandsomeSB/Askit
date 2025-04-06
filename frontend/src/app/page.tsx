@@ -22,11 +22,13 @@ export default function Home() {
   useEffect(() => {
     const checkAuth = async () => {
       try {
+        console.log("Checking auth");
         // Verify any existing session
-        const { valid } = await searchService.verifySession();
-        setIsAuthenticated(valid);
+        const { authenticated } = await searchService.verifySession();
+        setIsAuthenticated(authenticated);
+        console.log("Authenticated:", authenticated);
         
-        if (valid) {
+        if (authenticated) {
           // Load search history from localStorage
           const savedHistory = localStorage.getItem('searchHistory');
           if (savedHistory) {
@@ -39,6 +41,7 @@ export default function Home() {
           }
         }
         
+        // This is being moved to the callback page TO DELETE
         // Handle OAuth callback if present in URL
         const urlParams = new URLSearchParams(window.location.search);
         const code = urlParams.get('code');
@@ -64,9 +67,9 @@ export default function Home() {
     setError(null);
     
     try {
-      const { url } = await searchService.getGoogleAuthUrl();
-      // Redirect user to Google OAuth URL
-      window.location.href = url;
+      const { auth_url } = await searchService.getGoogleAuthUrl();
+
+      window.location.href = auth_url;
     } catch (err) {
       console.error('Error during login:', err);
       setError('Failed to initiate login process');

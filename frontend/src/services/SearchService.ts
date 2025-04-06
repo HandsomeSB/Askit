@@ -10,56 +10,27 @@ import {
 
 class SearchService {
   private baseUrl: string;
-  private sessionId: string | null;
 
-  constructor(baseUrl = '/api') {
+  constructor(baseUrl = 'http://localhost:8000/api') {
     this.baseUrl = baseUrl;
-    this.sessionId = null;
-
-    // Try to load session from localStorage
-    if (typeof window !== 'undefined') {
-      this.sessionId = localStorage.getItem('sessionId');
-    }
   }
 
   /**
-   * Set session ID for authenticated requests
-   */
-  setSessionId(sessionId: string) {
-    this.sessionId = sessionId;
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('sessionId', sessionId);
-    }
-  }
-
-  /**
-   * Clear session
-   */
-  clearSession() {
-    this.sessionId = null;
-    if (typeof window !== 'undefined') {
-      localStorage.removeItem('sessionId');
-    }
-  }
-
-  /**
-   * Make authenticated API request
+   * Make API request with credentials
    */
   async request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
     const url = `${this.baseUrl}${endpoint}`;
     
-    const headers: HeadersInit = {
+    const headers = {
       'Content-Type': 'application/json',
       ...options.headers,
     };
-    
-    if (this.sessionId) {
-      headers.Authorization = `Bearer ${this.sessionId}`;
-    }
-    
+
     const response = await fetch(url, {
       ...options,
       headers,
+      credentials: 'include',  // This is crucial - it sends cookies with the request
+      mode: 'cors',  // Explicitly set CORS mode
     });
     
     if (!response.ok) {
@@ -84,16 +55,10 @@ class SearchService {
    * Handle OAuth callback
    */
   async handleOAuthCallback(code: string, state: string): Promise<SessionResponse> {
-    const result = await this.request<SessionResponse>('/auth/google-callback', {
+    return this.request<SessionResponse>('/auth/google-callback', {
       method: 'POST',
-      body: JSON.stringify({ code, state }),
+      body: JSON.stringify({ "code": code, "state": state }),
     });
-    
-    if (result.sessionId) {
-      this.setSessionId(result.sessionId);
-    }
-    
-    return result;
   }
 
   /**
@@ -110,18 +75,24 @@ class SearchService {
    * Check if session is valid
    */
   async verifySession(): Promise<VerifySessionResponse> {
-    if (!this.sessionId) {
-      return { valid: false };
-    }
-    
     try {
-      const result = await this.request<VerifySessionResponse>('/verify-session');
-      return { valid: true, ...result };
+      const result = await this.request<VerifySessionResponse>('/auth/check');
+      return result;
     } catch (error: any) {
-      if (error.status === 401) {
-        this.clearSession();
-      }
-      return { valid: false };
+      return { authenticated: false };
+    }
+  }
+
+  /**
+   * Logout - clear session on server
+   */
+  async logout(): Promise<void> {
+    try {
+      await this.request('/auth/logout', {
+        method: 'POST',
+      });
+    } catch (error) {
+      console.error('Error during logout:', error);
     }
   }
 }

@@ -51,10 +51,11 @@ export interface FileResult {
   }
   
   export interface AuthUrlResponse {
-    url: string;
+    auth_url: string;
   }
   
   export interface VerifySessionResponse {
-    valid: boolean;
-    user?: User;
+    authenticated: boolean;
+    session_id?: string;
+    expires?: string;
   }

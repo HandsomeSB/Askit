@@ -48,6 +48,8 @@ app.add_middleware(
     SessionMiddleware,
     secret_key=SESSION_SECRET_KEY,
     max_age=3600,  # 1 hour session timeout
+    same_site="lax",  # Important for cross-site requests
+    https_only=False,  # Set to True in production with HTTPS
 )
 
 # Store for temporary auth states
@@ -123,11 +125,18 @@ async def get_auth_url(request: Request):
 
 
 @app.post("/api/auth/google-callback")
-async def auth_callback(request: Request, code: str, state: str):
+async def auth_callback(request: Request):
     """Handle OAuth callback from frontend"""
-    # Verify state to prevent CSRF
+    body = await request.json()
+    code = body.get("code")
+    state = body.get("state")
+
+        # Verify state to prevent CSRF
     if state not in auth_states:
         raise HTTPException(status_code=400, detail="Invalid or expired state parameter")
+
+    if not code or not state:
+        raise HTTPException(status_code=400, detail="Missing required parameters (code or state)")
     
     # Clean up state
     del auth_states[state]
@@ -319,9 +328,11 @@ async def check_auth(request: Request):
     Check if user is authenticated.
     """
     try:
+        print(f"Session contents in check_auth: {dict(request.session)}")
+        
         credentials_json = request.session.get("credentials")
         if not credentials_json:
-            return {"authenticated": False}
+            return {"authenticated": False, "reason": "No credentials in session"}
         
         # Try to parse credentials to verify they're valid
         credentials_info = json.loads(credentials_json)
