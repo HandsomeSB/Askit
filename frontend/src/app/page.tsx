@@ -146,7 +146,7 @@ export default function Home() {
   };
 
   const handleLogout = () => {
-    searchService.clearSession();
+    searchService.logout();
     setIsAuthenticated(false);
     setSearchResults([]);
     setSearchHistory([]);
