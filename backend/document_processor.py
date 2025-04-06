@@ -20,39 +20,6 @@ from llama_index.core import Document
 from file_metadata_extractor import FileMetadataExtractor
 
 
-# This class with process the files and return a list that looks like this:
-# all_documents = [
-#     # From Google Presentation
-#     Document(
-#         text="Slide 1 content...",
-#         metadata={
-#             "file_name": "presentation.pptx",
-#             "file_id": "456def",
-#             "mime_type": "application/vnd.google-apps.presentation",
-#         },
-#     ),
-#     Document(
-#         text="Slide 2 content...",
-#         metadata={
-#             "file_name": "presentation.pptx",
-#             "file_id": "456def",
-#             "mime_type": "application/vnd.google-apps.presentation",
-#         },
-#     ),
-#     # If there were any errors processing a file
-#     Document(
-#         text="Error processing file: [error message]",
-#         metadata={
-#             "file_name": "problematic_file.xyz",
-#             "file_id": "789ghi",
-#             "mime_type": "unknown/type",
-#             "error": "Error message details",
-#         },
-#     ),
-#     # ... more documents from other files
-# ]
-
-
 class DocumentProcessor:
     """
     Process files from Google Drive and convert to LlamaIndex documents.
