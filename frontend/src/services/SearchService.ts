@@ -7,7 +7,8 @@ import {
   SearchResponse, 
   VerifySessionResponse,
   ProcessFolderResponse,
-  QueryRequest
+  QueryRequest,
+  FileStructureResponse
 } from '../types/types';
 
 class SearchService {
@@ -73,7 +74,7 @@ class SearchService {
    * Process a Google Drive folder for indexing
    */
   async processFolder(folderId: string): Promise<ProcessFolderResponse> {
-    return this.request<ProcessFolderResponse>('/process-folder', {
+    return this.request<ProcessFolderResponse>('/process-folder-new', {
       method: 'POST',
       body: JSON.stringify({ folder_id: folderId }),
     });

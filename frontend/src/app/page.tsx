@@ -56,15 +56,6 @@ export default function Home() {
           await handleOAuthCallback(code, state);
         }
 
-        // Testing
-        try {
-          console.log("Getting file structure");
-          const fileStructure = await searchService.getFileStructure();
-          console.log("File structure:", fileStructure);
-        } catch (error) {
-          console.error("Error getting file structure:", error);
-        }
-
       } catch (err) {
         console.error('Auth check failed:', err);
         setIsAuthenticated(false);

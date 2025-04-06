@@ -290,7 +290,33 @@ async def process_folder_new(request: Request):
         
         # Create a DocumentProcessor with the user's drive service
         user_document_processor = DocumentProcessor(drive_service=drive_service)
+
+        local_json_store = LocalJsonStore()
+        local_store = local_json_store.load("db")
+        user_id = request.session.get("user_id")
+        if user_id not in local_store:
+            raise HTTPException(status_code=404, detail="User not found")
         
+        target_folder = None
+
+        def find_folder(childrens, folder_id):
+            for child in childrens:
+                if child["type"] == "folder" and child["id"] == folder_id:
+                    target_folder = child
+                    return
+                if "contents" in child:
+                    find_folder(child["children"], folder_id)
+
+        if request_body.folder_id == "root":
+            target_folder = local_store[user_id]
+        else:
+            find_folder(local_store[user_id]["contents"], request_body.folder_id)
+
+        if target_folder is None:
+            raise HTTPException(status_code=404, detail="Folder not found")
+        
+        return target_folder
+            
     except HTTPException:
         raise
     except Exception as e:
