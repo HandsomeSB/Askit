@@ -7,6 +7,9 @@ from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
 import io
 from googleapiclient.http import MediaIoBaseDownload
+import tempfile
+import pillow_heif
+from PIL import Image
 
 # Import various file type processors
 from llama_index.readers.file import PDFReader, DocxReader
@@ -14,12 +17,17 @@ from llama_index.readers.file.tabular import PandasExcelReader
 from llama_index.readers.file.image import ImageReader
 from llama_index.core import Document
 
+from file_metadata_extractor import FileMetadataExtractor
+
 
 class DocumentProcessor:
     """
     Process files from Google Drive and convert to LlamaIndex documents.
     Handles various file types including PDF, DOCX, images, Excel, etc.
     """
+
+    # Register HEIF opener with Pillow
+    pillow_heif.register_heif_opener()
 
     # Google Workspace MIME types
     GOOGLE_DOC_MIMETYPES = {
@@ -56,6 +64,7 @@ class DocumentProcessor:
         Returns:
             Google Drive service object
         """
+
         SCOPES = ["https://www.googleapis.com/auth/drive.readonly"]
         creds = None
 
@@ -119,6 +128,7 @@ class DocumentProcessor:
             print(f"Error building Google Drive service: {str(e)}")
             raise Exception(f"Failed to build Google Drive service: {str(e)}")
 
+    # This function is scanning all the files in a folder and returning a list of dictonaries each representing a file metadata
     def get_files_from_drive(self, folder_id: str) -> List[Dict[str, Any]]:
         """
         Get all files from a Google Drive folder.
@@ -132,7 +142,9 @@ class DocumentProcessor:
         files = []
         page_token = None
 
-        # Query files within the specified folder
+        # Enhanced fields parameter to get more metadata
+        fields = "nextPageToken,files(id,name,mimeType,createdTime,modifiedTime,imageMediaMetadata(time,cameraMake,cameraModel,location(latitude,longitude),width,height),thumbnailLink,webViewLink,size)"
+
         query = f"'{folder_id}' in parents and trashed=false"
 
         while True:
@@ -141,7 +153,7 @@ class DocumentProcessor:
                 .list(
                     q=query,
                     spaces="drive",
-                    fields="nextPageToken, files(id, name, mimeType)",
+                    fields=fields,
                     pageToken=page_token,
                 )
                 .execute()
@@ -155,6 +167,7 @@ class DocumentProcessor:
 
         return files
 
+    # This function is using the file metadata received from the previous function and using the `file_id` to download the file and return a list of documents
     def process_file(self, file_metadata: Dict[str, Any]) -> List[Document]:
         """
         Process a file from Google Drive based on its mime type.
@@ -169,84 +182,150 @@ class DocumentProcessor:
         file_name = file_metadata["name"]
         mime_type = file_metadata["mimeType"]
 
-        print(f"Processing file: {file_name} (ID: {file_id}, Type: {mime_type})")
+        # Base metadata that all files will have
+        base_metadata = {
+            "file_name": file_name,
+            "file_id": file_id,
+            "mime_type": mime_type,
+            "created_time": file_metadata.get("createdTime"),
+            "modified_time": file_metadata.get("modifiedTime"),
+            "web_view_link": file_metadata.get("webViewLink"),
+            "thumbnail_link": file_metadata.get("thumbnailLink"),
+            "size": file_metadata.get("size"),
+        }
 
-        # Handle Google Workspace files
-        if mime_type in self.GOOGLE_DOC_MIMETYPES:
-            try:
-                print(f"Exporting Google Workspace file: {file_name}")
-                file_content = self._export_google_file(file_id, mime_type)
-                processor = getattr(
-                    self, self.GOOGLE_DOC_MIMETYPES[mime_type]["processor"]
+        try:
+            # Handle Google Workspace files (Docs, Sheets, Slides)
+            if mime_type in self.GOOGLE_DOC_MIMETYPES:
+                export_type = self.GOOGLE_DOC_MIMETYPES[mime_type]["export_type"]
+                request = self.drive_service.files().export_media(
+                    fileId=file_id, mimeType=export_type
                 )
-                return processor(file_content, file_metadata)
-            except Exception as e:
-                print(f"Error processing Google Workspace file {file_name}: {str(e)}")
-                # Return a document with error information
-                return [
-                    Document(
-                        text=f"Error processing Google Workspace file: {str(e)}",
-                        metadata={
-                            "file_name": file_name,
-                            "file_id": file_id,
-                            "mime_type": mime_type,
-                            "error": str(e),
-                        },
+                fh = io.BytesIO()
+                downloader = MediaIoBaseDownload(fh, request)
+                done = False
+                while done is False:
+                    status, done = downloader.next_chunk()
+                content = fh.getvalue().decode("utf-8")
+                return [Document(text=content, metadata=base_metadata)]
+
+            # Handle regular files (PDF, DOCX, etc.)
+            with tempfile.NamedTemporaryFile(delete=False) as temp_file:
+                try:
+                    # Download the file
+                    request = self.drive_service.files().get_media(fileId=file_id)
+                    fh = io.BytesIO()
+                    downloader = MediaIoBaseDownload(fh, request)
+                    done = False
+                    while done is False:
+                        status, done = downloader.next_chunk()
+
+                    temp_file.write(fh.getvalue())
+                    temp_file_path = temp_file.name
+
+                    # Extract additional metadata based on file type
+                    additional_metadata = FileMetadataExtractor.extract_metadata(
+                        temp_file_path, mime_type
                     )
-                ]
+                    base_metadata.update(additional_metadata)
 
-        # Handle other file types
-        try:
-            file_content = self._download_file(file_id)
-        except Exception as e:
-            print(f"Error downloading file {file_name}: {str(e)}")
-            # Return a document with error information
-            return [
-                Document(
-                    text=f"Error downloading file: {str(e)}",
-                    metadata={
-                        "file_name": file_name,
-                        "file_id": file_id,
-                        "mime_type": mime_type,
-                        "error": str(e),
-                    },
-                )
-            ]
+                    # Process the file based on its type
+                    if mime_type == "application/pdf":
+                        try:
+                            docs = self.pdf_reader.load_data(temp_file_path)
+                            for doc in docs:
+                                doc.metadata.update(base_metadata)
+                            return docs
+                        except Exception as pdf_error:
+                            print(
+                                f"Error processing PDF file {file_name}: {str(pdf_error)}"
+                            )
+                            return [
+                                Document(
+                                    text=f"Error processing PDF file: {str(pdf_error)}",
+                                    metadata={**base_metadata, "error": str(pdf_error)},
+                                )
+                            ]
+                    elif mime_type in [
+                        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                        "application/msword",
+                    ]:
+                        try:
+                            # Load the document first, then add metadata
+                            docs = self.docx_reader.load_data(temp_file_path)
+                            for doc in docs:
+                                doc.metadata.update(base_metadata)
+                            return docs
+                        except Exception as docx_error:
+                            print(
+                                f"Error processing DOCX file {file_name}: {str(docx_error)}"
+                            )
+                            return [
+                                Document(
+                                    text=f"Error processing DOCX file: {str(docx_error)}",
+                                    metadata={
+                                        **base_metadata,
+                                        "error": str(docx_error),
+                                    },
+                                )
+                            ]
+                    elif mime_type in [
+                        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                        "application/vnd.ms-excel",
+                    ]:
+                        return self.excel_reader.load_data(
+                            temp_file_path, metadata=base_metadata
+                        )
+                    elif mime_type.startswith("image/"):
+                        try:
+                            # Special handling for HEIC/HEIF images
+                            if mime_type in ["image/heic", "image/heif"]:
+                                # Open HEIC image
+                                with Image.open(temp_file_path) as heic_img:
+                                    # Create a temporary file for the converted JPEG
+                                    with tempfile.NamedTemporaryFile(
+                                        suffix=".jpg", delete=False
+                                    ) as jpeg_temp:
+                                        # Convert and save as JPEG
+                                        heic_img.save(jpeg_temp.name, "JPEG")
+                                        # Update the temp_file_path to point to the converted image
+                                        temp_file_path = jpeg_temp.name
 
-        # Process based on file type
-        try:
-            if mime_type == "application/pdf":
-                return self._process_pdf(file_content, file_metadata)
-            elif (
-                mime_type
-                == "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-            ):
-                return self._process_docx(file_content, file_metadata)
-            elif (
-                mime_type
-                == "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-            ):
-                return self._process_excel(file_content, file_metadata)
-            elif mime_type.startswith("image/"):
-                return self._process_image(file_content, file_metadata)
-            elif (
-                mime_type.startswith("audio/")
-                or mime_type == "application/octet-stream"
-            ):
-                return self._process_audio(file_content, file_metadata)
-            else:
-                # Default processing for unknown types - convert to string if possible
-                return self._process_text(file_content, file_metadata)
+                            # Load the document first, then add metadata
+                            docs = self.image_reader.load_data(temp_file_path)
+                            for doc in docs:
+                                doc.metadata.update(base_metadata)
+                            return docs
+                        except Exception as image_error:
+                            print(
+                                f"Error processing image file {file_name}: {str(image_error)}"
+                            )
+                            return [
+                                Document(
+                                    text=f"Error processing image file: {str(image_error)}",
+                                    metadata={
+                                        **base_metadata,
+                                        "error": str(image_error),
+                                    },
+                                )
+                            ]
+                    else:
+                        with open(temp_file_path, "r", encoding="utf-8") as f:
+                            content = f.read()
+                        return [Document(text=content, metadata=base_metadata)]
+
+                finally:
+                    # Clean up the temporary file
+                    if "temp_file_path" in locals():
+                        os.unlink(temp_file_path)
+
         except Exception as e:
             print(f"Error processing file {file_name}: {str(e)}")
-            # Return a document with error information
             return [
                 Document(
                     text=f"Error processing file: {str(e)}",
                     metadata={
-                        "file_name": file_name,
-                        "file_id": file_id,
-                        "mime_type": mime_type,
+                        **base_metadata,
                         "error": str(e),
                     },
                 )
@@ -318,13 +397,7 @@ class DocumentProcessor:
         """Process PDF file"""
         documents = self.pdf_reader.load_data(file_content)
         for doc in documents:
-            doc.metadata.update(
-                {
-                    "file_name": file_metadata["name"],
-                    "file_id": file_metadata["id"],
-                    "mime_type": file_metadata["mimeType"],
-                }
-            )
+            doc.metadata.update(file_metadata)
         return documents
 
     def _process_docx(
@@ -333,13 +406,7 @@ class DocumentProcessor:
         """Process DOCX file"""
         documents = self.docx_reader.load_data(file_content)
         for doc in documents:
-            doc.metadata.update(
-                {
-                    "file_name": file_metadata["name"],
-                    "file_id": file_metadata["id"],
-                    "mime_type": file_metadata["mimeType"],
-                }
-            )
+            doc.metadata.update(file_metadata)
         return documents
 
     def _process_excel(
@@ -348,13 +415,7 @@ class DocumentProcessor:
         """Process Excel file"""
         documents = self.excel_reader.load_data(file_content)
         for doc in documents:
-            doc.metadata.update(
-                {
-                    "file_name": file_metadata["name"],
-                    "file_id": file_metadata["id"],
-                    "mime_type": file_metadata["mimeType"],
-                }
-            )
+            doc.metadata.update(file_metadata)
         return documents
 
     def _process_image(
@@ -363,13 +424,7 @@ class DocumentProcessor:
         """Process image file with OCR and image understanding"""
         documents = self.image_reader.load_data(file_content)
         for doc in documents:
-            doc.metadata.update(
-                {
-                    "file_name": file_metadata["name"],
-                    "file_id": file_metadata["id"],
-                    "mime_type": file_metadata["mimeType"],
-                }
-            )
+            doc.metadata.update(file_metadata)
         return documents
 
     def _process_audio(
@@ -379,9 +434,9 @@ class DocumentProcessor:
         doc = Document(
             text="[Audio file content not processed]",
             metadata={
-                "file_name": file_metadata["name"],
-                "file_id": file_metadata["id"],
-                "mime_type": file_metadata["mimeType"],
+                "file_name": file_metadata["file_name"],
+                "file_id": file_metadata["file_id"],
+                "mime_type": file_metadata["mime_type"],
                 "note": "Audio transcription not available in current version",
             },
         )
@@ -396,21 +451,17 @@ class DocumentProcessor:
             content = file_content.read().decode("utf-8")
             doc = Document(
                 text=content,
-                metadata={
-                    "file_name": file_metadata["name"],
-                    "file_id": file_metadata["id"],
-                    "mime_type": file_metadata["mimeType"],
-                },
+                metadata=file_metadata,
             )
             return [doc]
         except UnicodeDecodeError:
             # If can't decode as text, create a document with just metadata
             doc = Document(
-                text=f"Binary file: {file_metadata['name']}",
+                text=f"Binary file: {file_metadata['file_name']}",
                 metadata={
-                    "file_name": file_metadata["name"],
-                    "file_id": file_metadata["id"],
-                    "mime_type": file_metadata["mimeType"],
+                    "file_name": file_metadata["file_name"],
+                    "file_id": file_metadata["file_id"],
+                    "mime_type": file_metadata["mime_type"],
                     "content_type": "binary",
                 },
             )

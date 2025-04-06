@@ -22,7 +22,7 @@ load_dotenv()
 
 from document_processor import DocumentProcessor
 from indexer import DocumentIndexer
-from query_engine import QueryEngine
+from query_engine import EnhancedQueryEngine
 
 app = FastAPI(title="Document Retrieval System")
 
@@ -59,7 +59,7 @@ auth_states = {}
 try:
     document_processor = DocumentProcessor()
     document_indexer = DocumentIndexer()
-    query_engine = QueryEngine()
+    query_engine = EnhancedQueryEngine()
     print("Successfully initialized all components")
 except Exception as e:
     print(f"Error initializing components: {str(e)}")
