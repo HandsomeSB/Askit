@@ -266,7 +266,7 @@ async def process_folder(request: Request):
         
         # Create index from documents
         try:
-            index_id = document_indexer.create_index(documents, request_body["folder_id"], user_id=session_id)
+            index_id = document_indexer.create_index(documents, request_body["folder_id"])
         except Exception as index_error:
             print(f"Error creating index: {str(index_error)}")
             import traceback
