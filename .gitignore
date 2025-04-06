@@ -12,3 +12,4 @@ token.json
 !next.config.js
 !tailwind.config.js
 !postcss.config.js
+.DS_Store

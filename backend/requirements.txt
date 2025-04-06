@@ -3,6 +3,7 @@ fastapi>=0.104.0
 uvicorn>=0.23.2
 python-multipart>=0.0.6
 pydantic>=2.4.2
+itsdangerous>=2.2.0
 
 # Google Drive API
 google-api-python-client>=2.100.0
@@ -42,3 +43,5 @@ openai>=1.1.1
 
 # Date handling
 python-dateutil>=2.8.2
+# dotenv
+dotenv>=0.9.9
