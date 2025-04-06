@@ -8,39 +8,42 @@ interface Folder {
   name: string;
 }
 
-export default function FolderManager({ onFolderSelect }: { onFolderSelect: (folderId: string) => void }) {
+export default function FolderManager({ 
+  onFolderSelect,
+  isAuthenticated: parentIsAuthenticated 
+}: { 
+  onFolderSelect: (folderId: string) => void;
+  isAuthenticated: boolean;
+}) {
   const [folders, setFolders] = useState<Folder[]>([]);
   const [selectedFolder, setSelectedFolder] = useState<string | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
+  const [processingFolders, setProcessingFolders] = useState<Set<string>>(new Set());
   const [error, setError] = useState<string | null>(null);
   const [processingStatus, setProcessingStatus] = useState<string | null>(null);
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
 
   const searchService = useSearchService();
 
   useEffect(() => {
-    checkAuth();
-  }, []);
-
-  const checkAuth = async () => {
-    try {
-      const { authenticated } = await searchService.verifySession();
-      setIsAuthenticated(authenticated);
-      if (authenticated) {
-        loadFolders();
-      }
-    } catch (err) {
-      console.error('Auth check failed:', err);
-      setIsAuthenticated(false);
+    if (parentIsAuthenticated) {
+      loadFolders();
     }
-  };
+  }, [parentIsAuthenticated]);
 
   const loadFolders = async () => {
-    if (!isAuthenticated) return;
+    if (!parentIsAuthenticated) {
+      return;
+    }
     
     try {
-      const response = await searchService.getFolders();
-      setFolders(response.folders);
+      const response = await searchService.getFileStructure();
+      // Filter only folders from the contents
+      const folders = response.contents.filter(item => 
+        item.mimeType === 'application/vnd.google-apps.folder'
+      ).map(folder => ({
+        id: folder.id,
+        name: folder.name
+      }));
+      setFolders(folders);
     } catch (err: any) {
       setError('Failed to load folders: ' + (err.message || 'Unknown error'));
     }
@@ -51,10 +54,11 @@ export default function FolderManager({ onFolderSelect }: { onFolderSelect: (fol
     onFolderSelect(folderId);
   };
 
-  const handleProcessFolder = async (folderId: string) => {
-    if (!isAuthenticated) return;
+  const handleProcessFolder = async (folderId: string, event: React.MouseEvent) => {
+    event.stopPropagation();
+    if (!parentIsAuthenticated) return;
     
-    setIsLoading(true);
+    setProcessingFolders(prev => new Set(prev).add(folderId));
     setError(null);
     setProcessingStatus('Processing folder...');
 
@@ -65,13 +69,18 @@ export default function FolderManager({ onFolderSelect }: { onFolderSelect: (fol
       // Reload folders to get updated list
       await loadFolders();
     } catch (err: any) {
-      setError('Failed to process folder: ' + (err.message || 'Unknown error'));
+      const errorMessage = err.data?.detail || err.message || 'Unknown error';
+      setError(`Failed to process folder: ${errorMessage}`);
     } finally {
-      setIsLoading(false);
+      setProcessingFolders(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(folderId);
+        return newSet;
+      });
     }
   };
 
-  if (!isAuthenticated) {
+  if (!parentIsAuthenticated) {
     return (
       <div className="bg-white rounded-lg shadow p-4">
         <h2 className="text-lg font-semibold mb-4">Folders</h2>
@@ -106,20 +115,24 @@ export default function FolderManager({ onFolderSelect }: { onFolderSelect: (fol
               selectedFolder === folder.id ? 'bg-blue-50' : 'hover:bg-gray-50'
             }`}
           >
-            <button
-              onClick={() => handleFolderSelect(folder.id)}
-              className="flex-1 text-left px-2 py-1"
-            >
-              {folder.name}
-            </button>
+            <div className="flex-1">
+              <button
+                onClick={() => handleFolderSelect(folder.id)}
+                className="w-full text-left px-2 py-1"
+              >
+                {folder.name}
+              </button>
+            </div>
             
-            <button
-              onClick={() => handleProcessFolder(folder.id)}
-              disabled={isLoading}
-              className="px-3 py-1 text-sm text-blue-600 hover:bg-blue-50 rounded disabled:opacity-50"
-            >
-              {isLoading ? 'Processing...' : 'Process'}
-            </button>
+            <div className="ml-2">
+              <button
+                onClick={(event) => handleProcessFolder(folder.id, event)}
+                disabled={processingFolders.has(folder.id)}
+                className="px-3 py-1 text-sm text-blue-600 hover:bg-blue-50 rounded disabled:opacity-50"
+              >
+                {processingFolders.has(folder.id) ? 'Processing...' : 'Process'}
+              </button>
+            </div>
           </div>
         ))}
         

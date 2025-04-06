@@ -33,14 +33,16 @@ export interface FileResult {
     answer: string;
     sources: Array<{
       file: FileResult;
-      relevance_score: number;
       content: string;
+      relevance_score?: number;
     }>;
   }
   
   export interface ProcessFolderResponse {
     status: string;
     message: string;
+    folder_id: string;
+    index_id: string;
   }
   
   export interface QueryRequest {
@@ -56,19 +58,23 @@ export interface FileResult {
   }
   
   export interface SessionResponse {
-    sessionId: string;
+    session_id: string;
+    success: boolean;
     user?: User;
     expiresAt?: string;
   }
   
   export interface AuthUrlResponse {
     auth_url: string;
+    state: string;
   }
   
   export interface VerifySessionResponse {
     authenticated: boolean;
     session_id?: string;
     expires?: string;
+    reason?: string;
+    error?: string;
   }
 
   export interface FileStructureResponse {

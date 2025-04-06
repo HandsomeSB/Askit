@@ -120,7 +120,7 @@ async def get_auth_url(request: Request):
         prompt="consent"
     )
     
-    return {"auth_url": auth_url}
+    return {"url": auth_url, "state": state}
 
 
 @app.post("/api/auth/google-callback")
@@ -223,8 +223,15 @@ async def process_folder(request: Request, folder_request: ProcessFolderRequest)
         # Get all files from the folder
         try:
             files = user_document_processor.get_files_from_drive(folder_request.folder_id)
+            if not files:
+                raise HTTPException(
+                    status_code=400,
+                    detail="No files found in the specified folder"
+                )
         except Exception as drive_error:
             print(f"Error accessing Google Drive: {str(drive_error)}")
+            import traceback
+            print(traceback.format_exc())
             raise HTTPException(
                 status_code=500,
                 detail=f"Failed to access Google Drive: {str(drive_error)}",
@@ -232,20 +239,28 @@ async def process_folder(request: Request, folder_request: ProcessFolderRequest)
         
         # Process each file and convert to documents
         documents = []
+        failed_files = []
         for file in files:
             try:
                 file_documents = user_document_processor.process_file(file)
-                documents.extend(file_documents)
+                if file_documents:
+                    documents.extend(file_documents)
+                else:
+                    failed_files.append(f"{file.get('name', 'unknown')} (no content extracted)")
             except Exception as file_error:
-                print(
-                    f"Error processing file {file.get('name', 'unknown')}: {str(file_error)}"
-                )
+                print(f"Error processing file {file.get('name', 'unknown')}: {str(file_error)}")
+                import traceback
+                print(traceback.format_exc())
+                failed_files.append(f"{file.get('name', 'unknown')} ({str(file_error)})")
                 continue
         
         if not documents:
+            error_message = "No documents were successfully processed from the folder."
+            if failed_files:
+                error_message += f" Failed files: {', '.join(failed_files)}"
             raise HTTPException(
                 status_code=500,
-                detail="No documents were successfully processed from the folder",
+                detail=error_message
             )
         
         # Store session ID with the documents for user identification
@@ -255,18 +270,26 @@ async def process_folder(request: Request, folder_request: ProcessFolderRequest)
         
         # Create index from documents
         try:
-            index_id = document_indexer.create_index(documents, folder_request.folder_id, user_id=session_id)
+            index_id = document_indexer.create_index(documents, folder_request.folder_id)
         except Exception as index_error:
             print(f"Error creating index: {str(index_error)}")
+            import traceback
+            print(traceback.format_exc())
             raise HTTPException(
-                status_code=500, detail=f"Failed to create index: {str(index_error)}"
+                status_code=500, 
+                detail=f"Failed to create index: {str(index_error)}"
             )
         
-        return {
+        response = {
             "status": "success",
             "message": f"Processed {len(files)} files",
             "index_id": index_id,
         }
+        
+        if failed_files:
+            response["failed_files"] = failed_files
+            
+        return response
         
     except HTTPException:
         raise
