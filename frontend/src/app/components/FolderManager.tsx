@@ -20,6 +20,7 @@ export default function FolderManager({
   const [processingFolders, setProcessingFolders] = useState<Set<string>>(new Set());
   const [error, setError] = useState<string | null>(null);
   const [processingStatus, setProcessingStatus] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState<boolean>(false);
 
   const searchService = useSearchService();
 
@@ -34,6 +35,8 @@ export default function FolderManager({
       return;
     }
     
+    setIsLoading(true);
+    
     try {
       const response = await searchService.getFileStructure();
       // Filter only folders from the contents
@@ -46,6 +49,8 @@ export default function FolderManager({
       setFolders(folders);
     } catch (err: any) {
       setError('Failed to load folders: ' + (err.message || 'Unknown error'));
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -92,6 +97,13 @@ export default function FolderManager({
     );
   }
 
+  // Loading animation component
+  const LoadingSpinner = () => (
+    <div className="flex justify-center items-center py-8">
+      <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-500"></div>
+    </div>
+  );
+
   return (
     <div className="bg-white rounded-lg shadow p-4">
       <h2 className="text-lg font-semibold mb-4">Folders</h2>
@@ -109,40 +121,47 @@ export default function FolderManager({
       )}
       
       <div className="space-y-2">
-        {folders.map((folder) => (
-          <div 
-            key={folder.id}
-            className={`flex items-center justify-between p-2 rounded ${
-              selectedFolder === folder.id ? 'bg-blue-50' : 'hover:bg-gray-50'
-            }`}
-          >
-            <div className="flex-1">
-              <button
-                onClick={() => handleFolderSelect(folder.id)}
-                className="w-full text-left px-2 py-1"
-              >
-                {folder.name}
-              </button>
-            </div>
-            
-            <div className="ml-2">
-              <button
-                onClick={(event) => handleProcessFolder(folder.id, event)}
-                disabled={processingFolders.has(folder.id)}
-                className="px-3 py-1 text-sm text-blue-600 hover:bg-blue-50 rounded disabled:opacity-50"
-              >
-                {processingFolders.has(folder.id) ? 'Processing...' : 'Process'}
-              </button>
-            </div>
-          </div>
-        ))}
-        
-        {folders.length === 0 && (
+        {isLoading ? (
+          <LoadingSpinner />
+        ) : folders.length === 0 ? (
           <p className="text-gray-500 text-center py-4">
             No folders available. Select a folder to process.
           </p>
+        ) : (
+          folders.map((folder) => (
+            <div 
+              key={folder.id}
+              className={`flex items-center justify-between p-2 rounded ${
+                selectedFolder === folder.id ? 'bg-blue-50' : 'hover:bg-gray-50'
+              }`}
+            >
+              <div className="flex-1">
+                <button
+                  onClick={() => handleFolderSelect(folder.id)}
+                  className="w-full text-left px-2 py-1"
+                >
+                  {folder.name}
+                </button>
+              </div>
+              
+              <div className="ml-2">
+                <button
+                  onClick={(event) => handleProcessFolder(folder.id, event)}
+                  disabled={processingFolders.has(folder.id)}
+                  className="px-3 py-1 text-sm text-blue-600 hover:bg-blue-50 rounded disabled:opacity-50"
+                >
+                  {processingFolders.has(folder.id) ? (
+                    <span className="flex items-center">
+                      <span className="animate-spin h-4 w-4 mr-2 border-b-2 border-blue-500 rounded-full"></span>
+                      Processing...
+                    </span>
+                  ) : 'Process'}
+                </button>
+              </div>
+            </div>
+          ))
         )}
       </div>
     </div>
   );
-} 
+}
