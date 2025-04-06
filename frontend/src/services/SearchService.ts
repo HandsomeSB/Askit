@@ -1,20 +1,20 @@
-'use client';
+"use client";
 
-import { useState } from 'react';
-import { 
-  SessionResponse, 
-  AuthUrlResponse, 
-  SearchResponse, 
+import { useState } from "react";
+import {
+  SessionResponse,
+  AuthUrlResponse,
+  SearchResponse,
   VerifySessionResponse,
   ProcessFolderResponse,
   QueryRequest,
-  FileStructureResponse
-} from '../types/types';
+  FileStructureResponse,
+} from "../types/types";
 
 class SearchService {
   private baseUrl: string;
 
-  constructor(baseUrl = '/api') {
+  constructor(baseUrl = "/api") {
     this.baseUrl = baseUrl;
   }
 
@@ -23,33 +23,35 @@ class SearchService {
    */
   async request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
     const url = `${this.baseUrl}${endpoint}`;
-    
+
     const headers = {
-      'Content-Type': 'application/json',
+      "Content-Type": "application/json",
       ...options.headers,
     };
 
     const response = await fetch(url, {
       ...options,
       headers,
-      credentials: 'include',
+      credentials: "include",
     });
-    
+
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}));
-      const error: any = new Error(errorData.message || `Request failed with status ${response.status}`);
+      const error: any = new Error(
+        errorData.message || `Request failed with status ${response.status}`
+      );
       error.status = response.status;
       error.data = errorData;
-      
+
       // If unauthorized, redirect to login
       if (response.status === 401) {
-        window.location.href = '/';
+        window.location.href = "/";
         throw error;
       }
-      
+
       throw error;
     }
-    
+
     return response.json();
   }
 
@@ -57,19 +59,24 @@ class SearchService {
    * Initiate Google OAuth flow
    */
   async getGoogleAuthUrl(): Promise<AuthUrlResponse> {
-    const response = await this.request<{ auth_url: string, state?: string }>('/auth/google-url');
+    const response = await this.request<{ url: string; state?: string }>(
+      "/auth/google-url"
+    );
     return {
-      auth_url: response.auth_url,
-      state: response.state || ''
+      auth_url: response.url,
+      state: response.state || "",
     };
   }
 
   /**
    * Handle OAuth callback
    */
-  async handleOAuthCallback(code: string, state: string): Promise<SessionResponse> {
-    return this.request<SessionResponse>('/auth/google-callback', {
-      method: 'POST',
+  async handleOAuthCallback(
+    code: string,
+    state: string
+  ): Promise<SessionResponse> {
+    return this.request<SessionResponse>("/auth/google-callback", {
+      method: "POST",
       body: JSON.stringify({ code, state }),
     });
   }
@@ -78,8 +85,8 @@ class SearchService {
    * Process a Google Drive folder for indexing
    */
   async processFolder(folderId: string): Promise<ProcessFolderResponse> {
-    return this.request<ProcessFolderResponse>('/process-folder', {
-      method: 'POST',
+    return this.request<ProcessFolderResponse>("/process-folder", {
+      method: "POST",
       body: JSON.stringify({ folder_id: folderId }),
     });
   }
@@ -87,18 +94,25 @@ class SearchService {
   /**
    * Get folder structure from Google Drive
    */
-  async getFolderStructure(folderId: string = 'root'): Promise<Array<{ id: string; name: string; children: any[] }>> {
-    return this.request<Array<{ id: string; name: string; children: any[] }>>(`/drive/folder-structure?folder_id=${folderId}`);
+  async getFolderStructure(
+    folderId: string = "root"
+  ): Promise<Array<{ id: string; name: string; children: any[] }>> {
+    return this.request<Array<{ id: string; name: string; children: any[] }>>(
+      `/drive/folder-structure?folder_id=${folderId}`
+    );
   }
 
   /**
    * Perform semantic search
    */
-  async semanticSearch(query: string, folderId: string): Promise<SearchResponse> {
+  async semanticSearch(
+    query: string,
+    folderId: string
+  ): Promise<SearchResponse> {
     const request: QueryRequest = { query, folder_id: folderId };
-    
-    return this.request<SearchResponse>('/query', {
-      method: 'POST',
+
+    return this.request<SearchResponse>("/query", {
+      method: "POST",
       body: JSON.stringify(request),
     });
   }
@@ -108,7 +122,7 @@ class SearchService {
    */
   async verifySession(): Promise<VerifySessionResponse> {
     try {
-      const result = await this.request<VerifySessionResponse>('/auth/check');
+      const result = await this.request<VerifySessionResponse>("/auth/check");
       return result;
     } catch (error: any) {
       return { authenticated: false };
@@ -120,11 +134,11 @@ class SearchService {
    */
   async logout(): Promise<void> {
     try {
-      await this.request('/auth/logout', {
-        method: 'POST',
+      await this.request("/auth/logout", {
+        method: "POST",
       });
     } catch (error) {
-      console.error('Error during logout:', error);
+      console.error("Error during logout:", error);
     }
   }
 
@@ -133,14 +147,14 @@ class SearchService {
    */
   async getFileStructure(): Promise<FileStructureResponse> {
     console.log("Getting file structure");
-    return this.request<FileStructureResponse>('/drive/file-structure');
+    return this.request<FileStructureResponse>("/drive/file-structure");
   }
 }
 
 // Hook for using the SearchService in components
 export function useSearchService() {
   const [service] = useState(() => new SearchService());
-  
+
   return service;
 }
 

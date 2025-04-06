@@ -41,6 +41,15 @@ export default function Home() {
               localStorage.removeItem('searchHistory');
             }
           }
+          
+          // Only attempt to get file structure when authenticated
+          try {
+            console.log("Getting file structure");
+            const fileStructure = await searchService.getFileStructure();
+            console.log("File structure:", fileStructure);
+          } catch (error) {
+            console.error("Error getting file structure:", error);
+          }
         }
         
         // Handle OAuth callback if present in URL
@@ -51,15 +60,6 @@ export default function Home() {
         if (code && state) {
           setIsLoading(true);
           await handleOAuthCallback(code, state);
-        }
-
-        // Testing
-        try {
-          console.log("Getting file structure");
-          const fileStructure = await searchService.getFileStructure();
-          console.log("File structure:", fileStructure);
-        } catch (error) {
-          console.error("Error getting file structure:", error);
         }
 
       } catch (err) {

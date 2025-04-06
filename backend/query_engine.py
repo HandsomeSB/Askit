@@ -12,7 +12,7 @@ load_dotenv()
 from llama_index.core.query_engine import RetrieverQueryEngine
 from llama_index.core.retrievers import VectorIndexRetriever
 from llama_index.core.response_synthesizers import get_response_synthesizer
-from llama_index.llms.openai import OpenAI
+from llama_index.llms.gemini import Gemini
 from llama_index.core.postprocessor import SimilarityPostprocessor
 
 from indexer import DocumentIndexer, FILTERING_METADATA
@@ -78,10 +78,11 @@ class DateParser:
 
 
 class EnhancedQueryEngine:
-    def __init__(self, top_k: int = 3):
+    def __init__(self, top_k: int = 8, similarity_threshold: float = 0.78):
         self.document_indexer = DocumentIndexer()
-        self.llm = OpenAI(model="gpt-4-turbo-preview")
+        self.llm = Gemini(model="models/gemini-1.5-flash")
         self.top_k = top_k
+        self.similarity_threshold = similarity_threshold
         self.date_parser = DateParser()
 
     def _extract_metadata_filters(self, query: str) -> Tuple[str, Dict[str, Any]]:
@@ -179,14 +180,19 @@ class EnhancedQueryEngine:
         retriever = VectorIndexRetriever(
             index=index,
             similarity_top_k=self.top_k,
-            similarity_cutoff=0.7,
+            similarity_cutoff=self.similarity_threshold,
         )
         nodes = retriever.retrieve(cleaned_query)
 
-        if extracted_filters:
-            nodes = self._apply_metadata_filters(nodes, extracted_filters)
+        # Filter by relevance - only keep results that are truly relevant
+        relevant_nodes = self._filter_by_relevance(nodes)
 
-        return nodes
+        if extracted_filters:
+            relevant_nodes = self._apply_metadata_filters(
+                relevant_nodes, extracted_filters
+            )
+
+        return relevant_nodes
 
     def _metadata_only_search(self, index, metadata_filters: Dict[str, Any]):
         matching_nodes = []
@@ -207,6 +213,56 @@ class EnhancedQueryEngine:
                 if not self._value_matches(node.metadata.get(key), value):
                     return False
         return True
+
+    def _apply_metadata_filters(self, nodes, filters: Dict[str, Any]) -> List:
+        """
+        Filter a list of nodes based on metadata filters.
+        This is used after vector retrieval to further refine results.
+        """
+        if not filters:
+            return nodes
+
+        filtered_nodes = []
+        for node in nodes:
+            if self._matches_filters(node, filters):
+                filtered_nodes.append(node)
+
+        return filtered_nodes
+
+    def _filter_by_relevance(self, nodes):
+        """
+        Filter nodes to only include those that meet relevance criteria.
+        This ensures we don't return irrelevant results just to fill the top_k quota.
+        """
+        # If we have no nodes, return empty list
+        if not nodes:
+            return []
+
+        # Sort nodes by score in descending order
+        sorted_nodes = sorted(nodes, key=lambda x: x.score or 0, reverse=True)
+
+        # If we only have one result, return it if it's above the absolute minimum threshold
+        if len(sorted_nodes) == 1:
+            return (
+                sorted_nodes
+                if sorted_nodes[0].score >= self.similarity_threshold
+                else []
+            )
+
+        # If we have multiple results, apply dynamic thresholding
+        if len(sorted_nodes) > 1:
+            # Calculate the average score of the top 2 results
+            top_avg = sum(n.score or 0 for n in sorted_nodes[:2]) / 2
+
+            # Set dynamic threshold based on top results
+            dynamic_threshold = max(self.similarity_threshold, top_avg * 0.7)
+
+            # Keep only nodes that meet the dynamic threshold
+            return [
+                node for node in sorted_nodes if (node.score or 0) >= dynamic_threshold
+            ]
+
+        return sorted_nodes
 
     def _date_matches(self, node_date: str, target_date: str) -> bool:
         try:

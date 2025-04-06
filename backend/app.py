@@ -216,15 +216,17 @@ async def process_folder(request: Request):
         
         request_body = await request.json()
 
-        if not request_body.folder_id:
+        if not request_body.get("folder_id"):
             raise HTTPException(status_code=400, detail="folder_id is required")
+        
+        folder_id = request_body["folder_id"]
         
         # Create a DocumentProcessor with the user's drive service
         user_document_processor = DocumentProcessor(drive_service=drive_service)
         
         # Get all files from the folder
         try:
-            files = user_document_processor.get_files_from_drive(folder_request.folder_id)
+            files = user_document_processor.get_files_from_drive(folder_id)
             if not files:
                 raise HTTPException(
                     status_code=400,
@@ -272,7 +274,7 @@ async def process_folder(request: Request):
         
         # Create index from documents
         try:
-            index_id = document_indexer.create_index(documents, folder_request.folder_id)
+            index_id = document_indexer.create_index(documents, folder_id)
         except Exception as index_error:
             print(f"Error creating index: {str(index_error)}")
             import traceback
