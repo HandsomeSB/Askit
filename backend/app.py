@@ -215,91 +215,30 @@ async def process_folder(request: Request):
         drive_service = await get_drive_service(request)
         
         request_body = await request.json()
+        folder_id = request_body.get('folder_id')
 
-        if not request_body.folder_id:
+        if not folder_id:
             raise HTTPException(status_code=400, detail="folder_id is required")
         
-        # Create a DocumentProcessor with the user's drive service
-        user_document_processor = DocumentProcessor(drive_service=drive_service)
-        
-        # Get all files from the folder
-        try:
-            files = user_document_processor.get_files_from_drive(folder_request.folder_id)
-            if not files:
-                raise HTTPException(
-                    status_code=400,
-                    detail="No files found in the specified folder"
-                )
-        except Exception as drive_error:
-            print(f"Error accessing Google Drive: {str(drive_error)}")
-            import traceback
-            print(traceback.format_exc())
-            raise HTTPException(
-                status_code=500,
-                detail=f"Failed to access Google Drive: {str(drive_error)}",
-            )
-        
-        # Process each file and convert to documents
+        user_document_processor = DocumentProcessor(drive_service)
+
+        files = user_document_processor.get_files_from_drive(folder_id)
         documents = []
-        failed_files = []
         for file in files:
-            try:
-                file_documents = user_document_processor.process_file(file)
-                if file_documents:
-                    documents.extend(file_documents)
-                else:
-                    failed_files.append(f"{file.get('name', 'unknown')} (no content extracted)")
-            except Exception as file_error:
-                print(f"Error processing file {file.get('name', 'unknown')}: {str(file_error)}")
-                import traceback
-                print(traceback.format_exc())
-                failed_files.append(f"{file.get('name', 'unknown')} ({str(file_error)})")
-                continue
-        
-        if not documents:
-            error_message = "No documents were successfully processed from the folder."
-            if failed_files:
-                error_message += f" Failed files: {', '.join(failed_files)}"
-            raise HTTPException(
-                status_code=500,
-                detail=error_message
-            )
-        
-        # Store session ID with the documents for user identification
-        session_id = request.session.get("session_id", "anonymous")
-        for doc in documents:
-            doc.metadata["session_id"] = session_id
-        
-        # Create index from documents
-        try:
-            index_id = document_indexer.create_index(documents, folder_request.folder_id)
-        except Exception as index_error:
-            print(f"Error creating index: {str(index_error)}")
-            import traceback
-            print(traceback.format_exc())
-            raise HTTPException(
-                status_code=500, 
-                detail=f"Failed to create index: {str(index_error)}"
-            )
-        
-        response = {
-            "status": "success",
-            "message": f"Processed {len(files)} files",
-            "index_id": index_id,
-        }
-        
-        if failed_files:
-            response["failed_files"] = failed_files
-            
-        return response
-        
+            docs = user_document_processor.process_file(file)
+            for d in docs:
+                d.metadata = file
+            documents.extend(docs)
+
+        document_indexer.save_index_to_mongodb(documents)
+
     except HTTPException:
         raise
     except Exception as e:
+        print(f"Error in process_folder: {str(e)}")
         import traceback
-        print(f"Unexpected error in process_folder: {str(e)}")
-        print(traceback.format_exc())
-        raise HTTPException(status_code=500, detail=str(e))
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Error in process_folder: {str(e)}")
 
 
 @app.post("/api/query", response_model=QueryResponse)
