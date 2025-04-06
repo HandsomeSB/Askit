@@ -4,3 +4,5 @@ node_modules
 __pycache__
 storage
 credentials.json
+.DS_Store
+token.json

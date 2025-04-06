@@ -1,199 +1,213 @@
-// src/app/page.tsx
-"use client";
+'use client';
 
-import { useState } from "react";
-import Header from "@/components/Header";
-import FolderSelector from "@/components/FolderSelector";
-import ChatInterface from "@/components/ChatInterface";
-import { Message } from "@/lib/types";
+import { useState, useEffect } from 'react';
+import Logo from './components/Logo';
+import SearchBar from './components/SearchBar';
+import ResultsList from './components/ResultsList'
+import LoginButton from './components/LoginButton';
+import SearchHistory from './components/SearchHistory';
+import { useSearchService } from '../services/SearchService';
 
 export default function Home() {
-  // State for the selected folder
-  const [selectedFolder, setSelectedFolder] = useState<string | null>(null);
-  const [folderName, setFolderName] = useState<string | null>(null);
-  const [isProcessing, setIsProcessing] = useState<boolean>(false);
-  const [chatHistory, setChatHistory] = useState<Message[]>([
-    {
-      id: "0",
-      role: "system",
-      content:
-        "Hello! Select a Google Drive folder to start querying your documents.",
-    },
-  ]);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [searchResults, setSearchResults] = useState([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [searchHistory, setSearchHistory] = useState<any[]>([]);
+  const [currentQuery, setCurrentQuery] = useState('');
+  
+  const searchService = useSearchService();
 
-  // Handle folder selection
-  const handleFolderSelect = async (folderId: string, name: string) => {
-    setIsProcessing(true);
-    setSelectedFolder(folderId);
-    setFolderName(name);
-
-    try {
-      // Call API to process the folder
-      const response = await fetch("/api/process-folder", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ folder_id: folderId }),
-      });
-
-      const data = await response.json();
-
-      if (response.ok) {
-        // Add a system message indicating the folder was processed
-        setChatHistory((prev) => [
-          ...prev,
-          {
-            id: Date.now().toString(),
-            role: "system",
-            content: `Folder "${name}" has been processed. You can now ask questions about your documents.`,
-          },
-        ]);
-      } else {
-        setChatHistory((prev) => [
-          ...prev,
-          {
-            id: Date.now().toString(),
-            role: "system",
-            content: `Error processing folder: ${
-              data.detail || "Unknown error"
-            }`,
-          },
-        ]);
-        setSelectedFolder(null);
-        setFolderName(null);
+  // Check if user is already authenticated and load search history
+  useEffect(() => {
+    const checkAuth = async () => {
+      try {
+        console.log("Checking auth");
+        // Verify any existing session
+        const { authenticated } = await searchService.verifySession();
+        setIsAuthenticated(authenticated);
+        console.log("Authenticated:", authenticated);
+        
+        if (authenticated) {
+          // Load search history from localStorage
+          const savedHistory = localStorage.getItem('searchHistory');
+          if (savedHistory) {
+            try {
+              setSearchHistory(JSON.parse(savedHistory));
+            } catch (e) {
+              console.error('Error parsing search history:', e);
+              localStorage.removeItem('searchHistory');
+            }
+          }
+        }
+        
+        // This is being moved to the callback page TO DELETE
+        // Handle OAuth callback if present in URL
+        const urlParams = new URLSearchParams(window.location.search);
+        const code = urlParams.get('code');
+        const state = urlParams.get('state');
+        
+        if (code && state) {
+          setIsLoading(true);
+          await handleOAuthCallback(code, state);
+        }
+      } catch (err) {
+        console.error('Auth check failed:', err);
+        setIsAuthenticated(false);
+      } finally {
+        setIsLoading(false);
       }
-    } catch (error) {
-      console.error("Error processing folder:", error);
-      setChatHistory((prev) => [
-        ...prev,
-        {
-          id: Date.now().toString(),
-          role: "system",
-          content: "Error processing folder. Please try again.",
-        },
-      ]);
-      setSelectedFolder(null);
-      setFolderName(null);
-    } finally {
-      setIsProcessing(false);
+    };
+    
+    checkAuth();
+  }, []);
+
+  const handleLogin = async () => {
+    setIsLoading(true);
+    setError(null);
+    
+    try {
+      const { auth_url } = await searchService.getGoogleAuthUrl();
+
+      window.location.href = auth_url;
+    } catch (err) {
+      console.error('Error during login:', err);
+      setError('Failed to initiate login process');
+      setIsLoading(false);
     }
   };
 
-  // Handle sending a message
-  const handleSendMessage = async (message: string) => {
-    if (!selectedFolder) return;
-
-    // Add user message to chat
-    const userMessageId = Date.now().toString();
-    setChatHistory((prev) => [
-      ...prev,
-      {
-        id: userMessageId,
-        role: "user",
-        content: message,
-      },
-    ]);
-
-    // Add temporary assistant message
-    const assistantMessageId = (Date.now() + 1).toString();
-    setChatHistory((prev) => [
-      ...prev,
-      {
-        id: assistantMessageId,
-        role: "assistant",
-        content: "...",
-        isLoading: true,
-      },
-    ]);
-
+  const handleOAuthCallback = async (code: string, state: string) => {
+    setIsLoading(true);
+    setError(null);
+    
     try {
-      // Call API to query
-      const response = await fetch("/api/query", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          query: message,
-          folder_id: selectedFolder,
-        }),
-      });
-
-      const data = await response.json();
-
-      if (response.ok) {
-        // Update assistant message with response
-        setChatHistory((prev) =>
-          prev.map((msg) =>
-            msg.id === assistantMessageId
-              ? {
-                  ...msg,
-                  content: data.answer,
-                  sources: data.sources,
-                  isLoading: false,
-                }
-              : msg
-          )
-        );
-      } else {
-        // Update with error message
-        setChatHistory((prev) =>
-          prev.map((msg) =>
-            msg.id === assistantMessageId
-              ? {
-                  ...msg,
-                  content: `Error: ${data.detail || "Failed to get response"}`,
-                  isLoading: false,
-                }
-              : msg
-          )
-        );
-      }
-    } catch (error) {
-      console.error("Error querying:", error);
-      // Update with error message
-      setChatHistory((prev) =>
-        prev.map((msg) =>
-          msg.id === assistantMessageId
-            ? {
-                ...msg,
-                content: "Error processing your query. Please try again.",
-                isLoading: false,
-              }
-            : msg
-        )
-      );
+      const { sessionId } = await searchService.handleOAuthCallback(code, state);
+      setIsAuthenticated(true);
+      
+      // Clean URL
+      window.history.replaceState({}, document.title, '/');
+    } catch (err) {
+      console.error('Error processing OAuth callback:', err);
+      setError('Authentication failed');
+    } finally {
+      setIsLoading(false);
     }
+  };
+
+  const handleSearch = async (query: string) => {
+    if (!query.trim()) return;
+    
+    setCurrentQuery(query);
+    setIsLoading(true);
+    setError(null);
+    
+    try {
+      const { results } = await searchService.semanticSearch(query);
+      setSearchResults(results || []);
+      
+      // Add to search history
+      const newSearchItem = {
+        query,
+        timestamp: new Date().toISOString(),
+        resultCount: results?.length || 0
+      };
+      
+      const updatedHistory = [
+        newSearchItem,
+        ...searchHistory.filter(item => item.query !== query).slice(0, 9)
+      ];
+      
+      setSearchHistory(updatedHistory);
+      localStorage.setItem('searchHistory', JSON.stringify(updatedHistory));
+      
+    } catch (err: any) {
+      console.error('Error during search:', err);
+      
+      if (err.status === 401) {
+        setError('Your session has expired. Please log in again.');
+        setIsAuthenticated(false);
+      } else {
+        setError('Search failed: ' + (err.message || 'Unknown error'));
+      }
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleSelectHistory = (query: string) => {
+    setCurrentQuery(query);
+    handleSearch(query);
+  };
+
+  const handleClearHistory = () => {
+    setSearchHistory([]);
+    localStorage.removeItem('searchHistory');
+  };
+
+  const handleLogout = () => {
+    searchService.logout();
+    setIsAuthenticated(false);
+    setSearchResults([]);
+    setSearchHistory([]);
   };
 
   return (
-    <div className="flex flex-col h-screen">
-      <Header />
+    <main className="min-h-screen flex flex-col p-4 bg-gradient-to-b from-white to-gray-50">
+      <header className="flex justify-between items-center mb-8">
+        <Logo />
+        {isAuthenticated && (
+          <button 
+            onClick={handleLogout}
+            className="px-4 py-2 text-sm text-gray-600 border border-gray-300 rounded-full hover:bg-gray-100 transition-colors"
+          >
+            Sign Out
+          </button>
+        )}
+      </header>
 
-      <main className="flex flex-col flex-1 p-4 overflow-hidden">
-        <div className="flex flex-col md:flex-row gap-4 h-full">
-          {/* Sidebar with folder selector */}
-          <div className="w-full md:w-64 bg-white rounded-lg shadow p-4">
-            <FolderSelector
-              onFolderSelect={handleFolderSelect}
-              isProcessing={isProcessing}
-              selectedFolder={selectedFolder}
-              folderName={folderName}
-            />
-          </div>
-
-          {/* Main chat interface */}
-          <div className="flex-1 bg-white rounded-lg shadow overflow-hidden flex flex-col">
-            <ChatInterface
-              messages={chatHistory}
-              onSendMessage={handleSendMessage}
-              selectedFolder={selectedFolder}
-              isProcessing={isProcessing}
-            />
+      {!isAuthenticated ? (
+        <div className="flex-1 flex flex-col items-center justify-center">
+          <div className="text-center mb-10">
+            <h1 className="text-3xl font-bold text-gray-800 mb-4">Semantic Search for Google Drive</h1>
+            <p className="text-lg text-gray-600 mb-8">
+              Find what you're looking for, even when you don't know the exact name
+            </p>
+            <LoginButton onClick={handleLogin} isLoading={isLoading} />
           </div>
         </div>
-      </main>
-    </div>
+      ) : (
+        <div className="flex-1 max-w-5xl mx-auto w-full">
+          <SearchBar 
+            initialQuery={currentQuery} 
+            onSearch={handleSearch} 
+            isLoading={isLoading} 
+          />
+          
+          {error && (
+            <div className="bg-red-50 border-l-4 border-red-500 p-4 mb-6 text-red-700">
+              {error}
+            </div>
+          )}
+          
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <div className="lg:col-span-1">
+              <SearchHistory 
+                searches={searchHistory}
+                onSelectSearch={handleSelectHistory}
+                onClearHistory={handleClearHistory}
+              />
+            </div>
+            
+            <div className="lg:col-span-2">
+              <ResultsList 
+                results={searchResults} 
+                isLoading={isLoading} 
+              />
+            </div>
+          </div>
+        </div>
+      )}
+    </main>
   );
 }
