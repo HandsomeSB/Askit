@@ -20,7 +20,8 @@ pypdf>=4.0.0
 python-docx>=1.0.1
 pandas>=2.1.1
 openpyxl>=3.1.2
-pillow>=10.0.1
+pillow>=10.1.0
+pillow-heif>=0.22.0
 pycryptodome>=3.19.0
 
 # Audio processing

@@ -9,6 +9,7 @@ import exifread
 import ffmpeg
 import json
 import re
+from PIL import ExifTags
 
 
 class FileMetadataExtractor:
@@ -61,6 +62,7 @@ class FileMetadataExtractor:
         metadata = {}
         try:
             with Image.open(file_path) as img:
+                # Basic image metadata
                 metadata.update(
                     {
                         "width": img.width,
@@ -72,26 +74,57 @@ class FileMetadataExtractor:
                     }
                 )
 
-            # Extract EXIF data
-            with open(file_path, "rb") as f:
-                tags = exifread.process_file(f)
-                if tags:
-                    metadata["exif"] = {
-                        str(tag): str(value) for tag, value in tags.items()
-                    }
+                # Extract EXIF data using PIL for HEIC files
+                if img.format in ["HEIC", "HEIF"]:
+                    exif = img.getexif()
+                    if exif:
+                        # Convert EXIF data to a more readable format
+                        exif_data = {}
+                        for tag_id in exif:
+                            # Get the tag name
+                            tag = ExifTags.TAGS.get(tag_id, tag_id)
+                            value = exif.get(tag_id)
+                            # Decode bytes values if necessary
+                            if isinstance(value, bytes):
+                                try:
+                                    value = value.decode()
+                                except UnicodeDecodeError:
+                                    value = str(value)
+                            exif_data[tag] = str(value)
 
-                    # Extract common EXIF fields
-                    if "EXIF DateTimeOriginal" in tags:
-                        metadata["capture_time"] = str(tags["EXIF DateTimeOriginal"])
-                    if "Image Make" in tags:
-                        metadata["camera_make"] = str(tags["Image Make"])
-                    if "Image Model" in tags:
-                        metadata["camera_model"] = str(tags["Image Model"])
-                    if "GPS GPSLatitude" in tags and "GPS GPSLongitude" in tags:
-                        metadata["location"] = {
-                            "latitude": str(tags["GPS GPSLatitude"]),
-                            "longitude": str(tags["GPS GPSLongitude"]),
-                        }
+                        metadata["exif"] = exif_data
+
+                        # Extract common EXIF fields
+                        if "DateTime" in exif_data:
+                            metadata["capture_time"] = exif_data["DateTime"]
+                        if "Make" in exif_data:
+                            metadata["camera_make"] = exif_data["Make"]
+                        if "Model" in exif_data:
+                            metadata["camera_model"] = exif_data["Model"]
+                else:
+                    # Use exifread for non-HEIC images as it's more comprehensive
+                    with open(file_path, "rb") as f:
+                        tags = exifread.process_file(f)
+                        if tags:
+                            metadata["exif"] = {
+                                str(tag): str(value) for tag, value in tags.items()
+                            }
+
+                            # Extract common EXIF fields
+                            if "EXIF DateTimeOriginal" in tags:
+                                metadata["capture_time"] = str(
+                                    tags["EXIF DateTimeOriginal"]
+                                )
+                            if "Image Make" in tags:
+                                metadata["camera_make"] = str(tags["Image Make"])
+                            if "Image Model" in tags:
+                                metadata["camera_model"] = str(tags["Image Model"])
+                            if "GPS GPSLatitude" in tags and "GPS GPSLongitude" in tags:
+                                metadata["location"] = {
+                                    "latitude": str(tags["GPS GPSLatitude"]),
+                                    "longitude": str(tags["GPS GPSLongitude"]),
+                                }
+
         except Exception as e:
             print(f"Error extracting image metadata: {str(e)}")
         return metadata

@@ -8,6 +8,8 @@ from google.oauth2.credentials import Credentials
 import io
 from googleapiclient.http import MediaIoBaseDownload
 import tempfile
+import pillow_heif
+from PIL import Image
 
 # Import various file type processors
 from llama_index.readers.file import PDFReader, DocxReader
@@ -56,6 +58,9 @@ class DocumentProcessor:
     Process files from Google Drive and convert to LlamaIndex documents.
     Handles various file types including PDF, DOCX, images, Excel, etc.
     """
+
+    # Register HEIF opener with Pillow
+    pillow_heif.register_heif_opener()
 
     # Google Workspace MIME types
     GOOGLE_DOC_MIMETYPES = {
@@ -257,18 +262,44 @@ class DocumentProcessor:
 
                     # Process the file based on its type
                     if mime_type == "application/pdf":
-                        return self.pdf_reader.load_data(
-                            temp_file_path, metadata=base_metadata
-                        )
+                        try:
+                            docs = self.pdf_reader.load_data(temp_file_path)
+                            for doc in docs:
+                                doc.metadata.update(base_metadata)
+                            return docs
+                        except Exception as pdf_error:
+                            print(
+                                f"Error processing PDF file {file_name}: {str(pdf_error)}"
+                            )
+                            return [
+                                Document(
+                                    text=f"Error processing PDF file: {str(pdf_error)}",
+                                    metadata={**base_metadata, "error": str(pdf_error)},
+                                )
+                            ]
                     elif mime_type in [
                         "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
                         "application/msword",
                     ]:
-                        # Load the document first, then add metadata
-                        docs = self.docx_reader.load_data(temp_file_path)
-                        for doc in docs:
-                            doc.metadata.update(base_metadata)
-                        return docs
+                        try:
+                            # Load the document first, then add metadata
+                            docs = self.docx_reader.load_data(temp_file_path)
+                            for doc in docs:
+                                doc.metadata.update(base_metadata)
+                            return docs
+                        except Exception as docx_error:
+                            print(
+                                f"Error processing DOCX file {file_name}: {str(docx_error)}"
+                            )
+                            return [
+                                Document(
+                                    text=f"Error processing DOCX file: {str(docx_error)}",
+                                    metadata={
+                                        **base_metadata,
+                                        "error": str(docx_error),
+                                    },
+                                )
+                            ]
                     elif mime_type in [
                         "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                         "application/vnd.ms-excel",
@@ -277,9 +308,38 @@ class DocumentProcessor:
                             temp_file_path, metadata=base_metadata
                         )
                     elif mime_type.startswith("image/"):
-                        return self.image_reader.load_data(
-                            temp_file_path, metadata=base_metadata
-                        )
+                        try:
+                            # Special handling for HEIC/HEIF images
+                            if mime_type in ["image/heic", "image/heif"]:
+                                # Open HEIC image
+                                with Image.open(temp_file_path) as heic_img:
+                                    # Create a temporary file for the converted JPEG
+                                    with tempfile.NamedTemporaryFile(
+                                        suffix=".jpg", delete=False
+                                    ) as jpeg_temp:
+                                        # Convert and save as JPEG
+                                        heic_img.save(jpeg_temp.name, "JPEG")
+                                        # Update the temp_file_path to point to the converted image
+                                        temp_file_path = jpeg_temp.name
+
+                            # Load the document first, then add metadata
+                            docs = self.image_reader.load_data(temp_file_path)
+                            for doc in docs:
+                                doc.metadata.update(base_metadata)
+                            return docs
+                        except Exception as image_error:
+                            print(
+                                f"Error processing image file {file_name}: {str(image_error)}"
+                            )
+                            return [
+                                Document(
+                                    text=f"Error processing image file: {str(image_error)}",
+                                    metadata={
+                                        **base_metadata,
+                                        "error": str(image_error),
+                                    },
+                                )
+                            ]
                     else:
                         with open(temp_file_path, "r", encoding="utf-8") as f:
                             content = f.read()

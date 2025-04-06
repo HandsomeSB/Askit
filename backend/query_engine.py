@@ -306,7 +306,10 @@ class EnhancedQueryEngine:
 
         # Format the results into answer and sources
         if not results:
-            return "No relevant documents found.", []
+            return (
+                "I couldn't find any relevant documents in your folder to answer this question. Please make sure the documents you're looking for are in the selected folder and try again.",
+                [],
+            )
 
         # Generate a comprehensive answer using the LLM
         context = "\n\n".join([f"Document: {node.text}" for node in results])
@@ -315,13 +318,19 @@ class EnhancedQueryEngine:
 Documents:
 {context}
 
-Please provide a detailed answer that synthesizes information from the relevant documents."""
+Please provide a detailed answer that synthesizes information from the relevant documents. If the documents don't contain enough information to answer the question, please say so."""
 
         answer = self.llm.complete(prompt).text
 
         # Format sources
         sources = [
-            {"text": node.text, "metadata": node.metadata, "score": node.score}
+            {
+                "text": node.text,
+                "metadata": node.metadata,
+                "score": node.score,
+                "file_name": node.metadata.get("file_name", "Unknown"),
+                "mime_type": node.metadata.get("mime_type", "Unknown"),
+            }
             for node in results
         ]
 
