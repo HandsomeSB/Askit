@@ -44,5 +44,6 @@ openai>=1.1.1
 # Date handling
 python-dateutil>=2.8.2
 pillow-heif>=0.22.0
-# dotenv
-dotenv>=0.9.9
+
+# Environment variables
+python-dotenv>=1.0.0

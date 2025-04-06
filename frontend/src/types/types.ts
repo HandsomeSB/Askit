@@ -28,20 +28,30 @@ export interface FileResult {
     resultCount: number;
   }
   
+  export interface SearchResponse {
+    answer: string;
+    sources: Array<{
+      file: FileResult;
+      relevance_score: number;
+      content: string;
+    }>;
+  }
+  
+  export interface ProcessFolderResponse {
+    status: string;
+    message: string;
+  }
+  
+  export interface QueryRequest {
+    query: string;
+    folder_id?: string;
+  }
+  
   export interface User {
     id: string;
     name: string;
     email: string;
     photoUrl?: string;
-  }
-  
-  export interface SearchResponse {
-    results: FileResult[];
-    metadata?: {
-      totalResults: number;
-      processingTimeMs: number;
-      query: string;
-    };
   }
   
   export interface SessionResponse {

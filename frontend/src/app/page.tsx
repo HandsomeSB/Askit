@@ -6,15 +6,19 @@ import SearchBar from './components/SearchBar';
 import ResultsList from './components/ResultsList'
 import LoginButton from './components/LoginButton';
 import SearchHistory from './components/SearchHistory';
+import FolderManager from './components/FolderManager';
 import { useSearchService } from '../services/SearchService';
+import { SearchResponse, FileResult } from '../types/types';
 
 export default function Home() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [searchResults, setSearchResults] = useState([]);
+  const [searchResults, setSearchResults] = useState<FileResult[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [searchHistory, setSearchHistory] = useState<any[]>([]);
   const [currentQuery, setCurrentQuery] = useState('');
+  const [selectedFolder, setSelectedFolder] = useState<string | null>(null);
+  const [currentAnswer, setCurrentAnswer] = useState<string | null>(null);
   
   const searchService = useSearchService();
 
@@ -101,16 +105,27 @@ export default function Home() {
     setCurrentQuery(query);
     setIsLoading(true);
     setError(null);
+    setCurrentAnswer(null);
     
     try {
-      const { results } = await searchService.semanticSearch(query);
-      setSearchResults(results || []);
+      const response = await searchService.semanticSearch(query, selectedFolder || undefined);
+      
+      // Extract file results from sources
+      const fileResults = response.sources.map(source => ({
+        ...source.file,
+        matchDetails: source.content.substring(0, 200) + '...' // Add a preview of the matched content
+      }));
+      
+      setSearchResults(fileResults);
+      setCurrentAnswer(response.answer);
       
       // Add to search history
       const newSearchItem = {
         query,
         timestamp: new Date().toISOString(),
-        resultCount: results?.length || 0
+        resultCount: fileResults.length,
+        folderId: selectedFolder,
+        answer: response.answer
       };
       
       const updatedHistory = [
@@ -133,6 +148,12 @@ export default function Home() {
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const handleFolderSelect = (folderId: string) => {
+    setSelectedFolder(folderId);
+    // Clear previous search results when selecting a new folder
+    setSearchResults([]);
   };
 
   const handleSelectHistory = (query: string) => {
@@ -177,33 +198,42 @@ export default function Home() {
           </div>
         </div>
       ) : (
-        <div className="flex-1 max-w-5xl mx-auto w-full">
-          <SearchBar 
-            initialQuery={currentQuery} 
-            onSearch={handleSearch} 
-            isLoading={isLoading} 
-          />
-          
-          {error && (
-            <div className="bg-red-50 border-l-4 border-red-500 p-4 mb-6 text-red-700">
-              {error}
-            </div>
-          )}
-          
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="flex-1 max-w-7xl mx-auto w-full">
+          <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
             <div className="lg:col-span-1">
-              <SearchHistory 
-                searches={searchHistory}
-                onSelectSearch={handleSelectHistory}
-                onClearHistory={handleClearHistory}
-              />
+              <FolderManager onFolderSelect={handleFolderSelect} />
             </div>
             
-            <div className="lg:col-span-2">
-              <ResultsList 
-                results={searchResults} 
+            <div className="lg:col-span-3">
+              <SearchBar 
+                initialQuery={currentQuery} 
+                onSearch={handleSearch} 
                 isLoading={isLoading} 
               />
+              
+              {error && (
+                <div className="bg-red-50 border-l-4 border-red-500 p-4 mb-6 text-red-700">
+                  {error}
+                </div>
+              )}
+              
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <div className="lg:col-span-1">
+                  <SearchHistory 
+                    searches={searchHistory}
+                    onSelectSearch={handleSelectHistory}
+                    onClearHistory={handleClearHistory}
+                  />
+                </div>
+                
+                <div className="lg:col-span-2">
+                  <ResultsList 
+                    results={searchResults} 
+                    isLoading={isLoading}
+                    answer={currentAnswer || undefined}
+                  />
+                </div>
+              </div>
             </div>
           </div>
         </div>

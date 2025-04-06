@@ -54,7 +54,7 @@ class DocumentProcessor:
         self.image_reader = ImageReader()
 
         # Use provided drive service or create a new one
-        self.drive_service = drive_service or self._setup_drive_connection()
+        self.drive_service = drive_service
 
     # Connecting on server side. Remove later
     def _setup_drive_connection(self):
