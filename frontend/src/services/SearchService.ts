@@ -125,6 +125,14 @@ class SearchService {
       console.error('Error during logout:', error);
     }
   }
+
+  /**
+   * Get file structure
+   */
+  async getFileStructure(): Promise<FileStructureResponse> {
+    console.log("Getting file structure");
+    return this.request<FileStructureResponse>('/drive/file-structure');
+  }
 }
 
 // Hook for using the SearchService in components
