@@ -203,7 +203,7 @@ async def get_drive_service(request: Request):
 
 
 @app.post("/api/process-folder")
-async def process_folder(request: Request, folder_request: ProcessFolderRequest):
+async def process_folder(request: Request):
     """
     Process all files in a Google Drive folder and create an index.
     Uses the authenticated user's credentials.
@@ -212,7 +212,9 @@ async def process_folder(request: Request, folder_request: ProcessFolderRequest)
         # Get the authenticated user's drive service
         drive_service = await get_drive_service(request)
         
-        if not folder_request.folder_id:
+        request_body = await request.json()
+
+        if not request_body.folder_id:
             raise HTTPException(status_code=400, detail="folder_id is required")
         
         # Create a DocumentProcessor with the user's drive service
