@@ -224,7 +224,7 @@ async def process_folder(request: Request):
         
         # Get all files from the folder
         try:
-            files = user_document_processor.get_files_from_drive(folder_request.folder_id)
+            files = user_document_processor.get_files_from_drive(request_body.folder_id)
         except Exception as drive_error:
             print(f"Error accessing Google Drive: {str(drive_error)}")
             raise HTTPException(
@@ -257,7 +257,7 @@ async def process_folder(request: Request):
         
         # Create index from documents
         try:
-            index_id = document_indexer.create_index(documents, folder_request.folder_id, user_id=session_id)
+            index_id = document_indexer.create_index(documents, request_body.folder_id, user_id=session_id)
         except Exception as index_error:
             print(f"Error creating index: {str(index_error)}")
             raise HTTPException(
