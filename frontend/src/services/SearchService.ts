@@ -94,11 +94,8 @@ class SearchService {
   /**
    * Perform semantic search
    */
-  async semanticSearch(query: string, folderId?: string): Promise<SearchResponse> {
-    const request: QueryRequest = { query };
-    if (folderId) {
-      request.folder_id = folderId;
-    }
+  async semanticSearch(query: string, folderId: string): Promise<SearchResponse> {
+    const request: QueryRequest = { query, folder_id: folderId };
     
     return this.request<SearchResponse>('/query', {
       method: 'POST',

@@ -3,63 +3,63 @@
 import React from 'react';
 
 interface FileIconProps {
-  mimeType: string;
+  mimeType?: string;
   size?: 'sm' | 'md' | 'lg';
   className?: string;
 }
 
-export default function FileIcon({ mimeType, size = 'md', className = '' }: FileIconProps) {
+export default function FileIcon({ mimeType = '', size = 'md', className = '' }: FileIconProps) {
   // Determine icon based on mimeType
   let icon = '📄'; // Default document
   
   // Images
-  if (mimeType.includes('image/')) {
+  if (mimeType && mimeType.includes('image/')) {
     icon = '🖼️';
   }
   // Google Docs
-  else if (mimeType.includes('application/vnd.google-apps.document')) {
+  else if (mimeType && mimeType.includes('application/vnd.google-apps.document')) {
     icon = '📝';
   }
   // Google Sheets
-  else if (mimeType.includes('application/vnd.google-apps.spreadsheet') || 
+  else if (mimeType && (mimeType.includes('application/vnd.google-apps.spreadsheet') || 
            mimeType.includes('spreadsheet') ||
-           mimeType.includes('excel')) {
+           mimeType.includes('excel'))) {
     icon = '📊';
   }
   // Google Slides
-  else if (mimeType.includes('application/vnd.google-apps.presentation') || 
+  else if (mimeType && (mimeType.includes('application/vnd.google-apps.presentation') || 
            mimeType.includes('presentation') ||
-           mimeType.includes('powerpoint')) {
+           mimeType.includes('powerpoint'))) {
     icon = '📑';
   }
   // PDF
-  else if (mimeType.includes('application/pdf')) {
+  else if (mimeType && mimeType.includes('application/pdf')) {
     icon = '📕';
   }
   // Folder
-  else if (mimeType.includes('folder')) {
+  else if (mimeType && mimeType.includes('folder')) {
     icon = '📁';
   }
   // Audio
-  else if (mimeType.includes('audio/')) {
+  else if (mimeType && mimeType.includes('audio/')) {
     icon = '🎵';
   }
   // Video
-  else if (mimeType.includes('video/')) {
+  else if (mimeType && mimeType.includes('video/')) {
     icon = '🎬';
   }
   // Archive
-  else if (mimeType.includes('zip') || 
+  else if (mimeType && (mimeType.includes('zip') || 
            mimeType.includes('tar') || 
            mimeType.includes('rar') || 
-           mimeType.includes('archive')) {
+           mimeType.includes('archive'))) {
     icon = '🗃️';
   }
   // Code
-  else if (mimeType.includes('application/json') || 
+  else if (mimeType && (mimeType.includes('application/json') || 
            mimeType.includes('text/html') || 
            mimeType.includes('text/css') || 
-           mimeType.includes('javascript')) {
+           mimeType.includes('javascript'))) {
     icon = '💻';
   }
   

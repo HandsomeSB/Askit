@@ -109,19 +109,35 @@ export default function Home() {
   const handleSearch = async (query: string) => {
     if (!query.trim()) return;
     
+    // Check if a folder is selected
+    if (!selectedFolder) {
+      setError('Please select a folder before searching');
+      return;
+    }
+    
     setCurrentQuery(query);
     setIsLoading(true);
     setError(null);
     setCurrentAnswer(null);
     
     try {
-      const response = await searchService.semanticSearch(query, selectedFolder || undefined);
+      const response = await searchService.semanticSearch(query, selectedFolder);
+      console.log('Search response:', response);
       
       // Extract file results from sources
-      const fileResults = response.sources.map(source => ({
-        ...source.file,
-        matchDetails: source.content.substring(0, 200) + '...' // Add a preview of the matched content
-      }));
+      const fileResults = response.sources.map(source => {
+        console.log('Source:', source);
+        return {
+          id: source.metadata?.id || `file-${Math.random().toString(36).substring(2, 9)}`,
+          name: source.file_name || 'Untitled File',
+          mimeType: source.mime_type || 'application/octet-stream',
+          webViewLink: source.web_view_link || '#',
+          modifiedTime: source.metadata?.modified_time || new Date().toISOString(),
+          matchDetails: source.text ? source.text.substring(0, 200) + '...' : 'No content available'
+        };
+      });
+      
+      console.log('File results:', fileResults);
       
       setSearchResults(fileResults);
       setCurrentAnswer(response.answer);

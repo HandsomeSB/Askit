@@ -32,17 +32,24 @@ export interface FileResult {
   export interface SearchResponse {
     answer: string;
     sources: Array<{
-      file: FileResult;
-      content: string;
-      relevance_score?: number;
+      text: string;
+      metadata: {
+        id?: string;
+        modified_time?: string;
+        [key: string]: any;
+      };
+      score?: number;
+      file_name: string;
+      mime_type: string;
+      web_view_link: string;
     }>;
   }
   
   export interface ProcessFolderResponse {
     status: string;
     message: string;
-    folder_id: string;
     index_id: string;
+    failed_files?: string[];
   }
   
   export interface QueryRequest {

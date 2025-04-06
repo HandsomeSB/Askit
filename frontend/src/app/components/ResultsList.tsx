@@ -51,8 +51,8 @@ export default function ResultsList({ results, isLoading, answer }: ResultsListP
       
       <h2 className="text-lg font-medium p-4 border-b border-gray-100">Search Results</h2>
       <div className="divide-y divide-gray-100">
-        {results.map((result) => (
-          <div key={result.id} className="p-4 hover:bg-gray-50 transition-colors">
+        {results.map((result, index) => (
+          <div key={result.id || `result-${index}`} className="p-4 hover:bg-gray-50 transition-colors">
             <div className="flex">
               <div className="mr-4 flex-shrink-0">
                 <FileIcon mimeType={result.mimeType} size="md" />
@@ -64,7 +64,7 @@ export default function ResultsList({ results, isLoading, answer }: ResultsListP
                   </a>
                 </h3>
                 <div className="flex text-sm text-gray-500 mb-2 flex-wrap gap-x-4">
-                  <span>{result.mimeType.split('.').pop()?.toUpperCase()}</span>
+                  <span>{result.mimeType ? result.mimeType.split('.').pop()?.toUpperCase() : 'FILE'}</span>
                   <span>Modified: {formatDate(result.modifiedTime)}</span>
                 </div>
                 {result.description && (

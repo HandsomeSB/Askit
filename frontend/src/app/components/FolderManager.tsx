@@ -55,6 +55,7 @@ export default function FolderManager({
   };
 
   const handleProcessFolder = async (folderId: string, event: React.MouseEvent) => {
+    console.log("handleProcessFolder called with folderId:", folderId);
     event.stopPropagation();
     if (!parentIsAuthenticated) return;
     
