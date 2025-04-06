@@ -4,3 +4,11 @@ node_modules
 __pycache__
 storage
 credentials.json
+token.json
+*.json
+!package.json
+!package-lock.json
+!tsconfig.json
+!next.config.js
+!tailwind.config.js
+!postcss.config.js
