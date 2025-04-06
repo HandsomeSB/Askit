@@ -57,7 +57,6 @@ auth_states = {}
 
 # Initialize components
 try:
-    document_processor = DocumentProcessor()
     document_indexer = DocumentIndexer()
     query_engine = EnhancedQueryEngine()
     print("Successfully initialized all components")
@@ -66,7 +65,6 @@ except Exception as e:
     import traceback
     traceback.print_exc()
     # We'll initialize them as None and handle it in the endpoints
-    document_processor = None
     document_indexer = None
     query_engine = None
 
@@ -473,7 +471,6 @@ async def get_folder_structure(request: Request, folder_id: Optional[str] = "roo
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-        
 
 @app.get("/api/drive/file-structure")
 async def get_file_structure(request: Request, folder_id: Optional[str] = "root"):
