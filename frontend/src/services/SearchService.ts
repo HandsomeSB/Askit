@@ -57,7 +57,11 @@ class SearchService {
    * Initiate Google OAuth flow
    */
   async getGoogleAuthUrl(): Promise<AuthUrlResponse> {
-    return this.request<AuthUrlResponse>('/auth/google-url');
+    const response = await this.request<{ auth_url: string, state?: string }>('/auth/google-url');
+    return {
+      auth_url: response.auth_url,
+      state: response.state || ''
+    };
   }
 
   /**
@@ -81,10 +85,10 @@ class SearchService {
   }
 
   /**
-   * Get list of processed folders
+   * Get folder structure from Google Drive
    */
-  async getFolders(): Promise<{ folders: Array<{ id: string; name: string }> }> {
-    return this.request('/folders');
+  async getFolderStructure(folderId: string = 'root'): Promise<Array<{ id: string; name: string; children: any[] }>> {
+    return this.request<Array<{ id: string; name: string; children: any[] }>>(`/drive/folder-structure?folder_id=${folderId}`);
   }
 
   /**

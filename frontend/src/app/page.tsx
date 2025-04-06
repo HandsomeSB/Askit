@@ -26,11 +26,9 @@ export default function Home() {
   useEffect(() => {
     const checkAuth = async () => {
       try {
-        console.log("Checking auth");
         // Verify any existing session
         const { authenticated } = await searchService.verifySession();
         setIsAuthenticated(authenticated);
-        console.log("Authenticated:", authenticated);
         
         if (authenticated) {
           // Load search history from localStorage
@@ -45,7 +43,6 @@ export default function Home() {
           }
         }
         
-        // This is being moved to the callback page TO DELETE
         // Handle OAuth callback if present in URL
         const urlParams = new URLSearchParams(window.location.search);
         const code = urlParams.get('code');
@@ -87,7 +84,7 @@ export default function Home() {
     setError(null);
     
     try {
-      const { sessionId } = await searchService.handleOAuthCallback(code, state);
+      const { session_id } = await searchService.handleOAuthCallback(code, state);
       setIsAuthenticated(true);
       
       // Clean URL
@@ -202,7 +199,10 @@ export default function Home() {
         <div className="flex-1 max-w-7xl mx-auto w-full">
           <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
             <div className="lg:col-span-1">
-              <FolderManager onFolderSelect={handleFolderSelect} />
+              <FolderManager 
+                onFolderSelect={handleFolderSelect} 
+                isAuthenticated={isAuthenticated}
+              />
             </div>
             
             <div className="lg:col-span-3">

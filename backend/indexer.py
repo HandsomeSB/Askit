@@ -38,7 +38,10 @@ class DocumentIndexer:
     def __init__(self, persist_dir: str = "./storage"):
         self.persist_dir = persist_dir
         self.embedding_model = OpenAIEmbedding()
-        self.node_parser = SemanticSplitterNodeParser(chunk_size=1024, embed_model=self.embedding_model)
+        self.node_parser = SemanticSplitterNodeParser(
+            chunk_size=1024,
+            embed_model=self.embedding_model
+        )
 
         os.makedirs(persist_dir, exist_ok=True)
 
