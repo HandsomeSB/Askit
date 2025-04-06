@@ -16,6 +16,7 @@ from google_auth_oauthlib.flow import InstalledAppFlow
 from google.auth.transport.requests import Request as GoogleAuthRequest
 from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
+from localJsonStore import LocalJsonStore
 
 # Load environment variables from .env file
 load_dotenv()
@@ -222,7 +223,7 @@ async def process_folder(request: Request):
         
         # Get all files from the folder
         try:
-            files = user_document_processor.get_files_from_drive(folder_request.folder_id)
+            files = user_document_processor.get_files_from_drive(request_body.folder_id)
         except Exception as drive_error:
             print(f"Error accessing Google Drive: {str(drive_error)}")
             raise HTTPException(
@@ -255,7 +256,7 @@ async def process_folder(request: Request):
         
         # Create index from documents
         try:
-            index_id = document_indexer.create_index(documents, folder_request.folder_id, user_id=session_id)
+            index_id = document_indexer.create_index(documents, request_body.folder_id, user_id=session_id)
         except Exception as index_error:
             print(f"Error creating index: {str(index_error)}")
             raise HTTPException(
@@ -267,6 +268,28 @@ async def process_folder(request: Request):
             "message": f"Processed {len(files)} files",
             "index_id": index_id,
         }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        import traceback
+        print(f"Unexpected error in process_folder: {str(e)}")
+        print(traceback.format_exc())
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/process-folder-new")
+async def process_folder_new(request: Request):
+    try:
+        # Get the authenticated user's drive service
+        drive_service = await get_drive_service(request)
+        
+        request_body = await request.json()
+
+        if not request_body.folder_id:
+            raise HTTPException(status_code=400, detail="folder_id is required")
+        
+        # Create a DocumentProcessor with the user's drive service
+        user_document_processor = DocumentProcessor(drive_service=drive_service)
         
     except HTTPException:
         raise
@@ -408,6 +431,7 @@ async def get_drive_folders(request: Request):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+# TESTING
 @app.get("/api/drive/folder-structure")
 async def get_folder_structure(request: Request, folder_id: Optional[str] = "root"):
     """
@@ -470,7 +494,6 @@ async def get_folder_structure(request: Request, folder_id: Optional[str] = "roo
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
-
 
 @app.get("/api/drive/file-structure")
 async def get_file_structure(request: Request, folder_id: Optional[str] = "root"):
@@ -569,11 +592,27 @@ async def get_file_structure(request: Request, folder_id: Optional[str] = "root"
                 fields="id, name, mimeType, createdTime, modifiedTime"
             ).execute()
         
-        return {
+
+        obj = {
             "folder_id": folder_id,
             "folder_details": folder_details,
             "contents": file_structure
         }
+        
+        
+        try:
+            user_id = request.session.get("user_id")
+            local_json_store = LocalJsonStore()
+            local_store = local_json_store.load("db")
+            if user_id not in local_store:
+                local_store[user_id] = {}
+            
+            local_json_store.deep_merge(local_store[user_id], obj)
+            local_json_store.save("db", local_store)
+        except Exception as e:
+            print(f"Error while saving to local JSON store: {str(e)}")
+
+        return obj
         
     except HTTPException:
         raise
