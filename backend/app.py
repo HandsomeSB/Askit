@@ -214,8 +214,8 @@ async def process_folder(request: Request):
         drive_service = await get_drive_service(request)
         
         request_body = await request.json()
-
-        if not request_body.folder_id:
+        print(request_body)
+        if not request_body["folder_id"]:
             raise HTTPException(status_code=400, detail="folder_id is required")
         
         # Create a DocumentProcessor with the user's drive service
@@ -223,7 +223,7 @@ async def process_folder(request: Request):
         
         # Get all files from the folder
         try:
-            files = user_document_processor.get_files_from_drive(request_body.folder_id)
+            files = user_document_processor.get_files_from_drive(request_body["folder_id"])
         except Exception as drive_error:
             print(f"Error accessing Google Drive: {str(drive_error)}")
             import traceback
@@ -266,7 +266,7 @@ async def process_folder(request: Request):
         
         # Create index from documents
         try:
-            index_id = document_indexer.create_index(documents, request_body.folder_id, user_id=session_id)
+            index_id = document_indexer.create_index(documents, request_body["folder_id"], user_id=session_id)
         except Exception as index_error:
             print(f"Error creating index: {str(index_error)}")
             import traceback
@@ -298,7 +298,7 @@ async def process_folder_new(request: Request):
         
         request_body = await request.json()
 
-        if not request_body.folder_id:
+        if not request_body["folder_id"]:
             raise HTTPException(status_code=400, detail="folder_id is required")
         
         # Create a DocumentProcessor with the user's drive service
@@ -313,6 +313,7 @@ async def process_folder_new(request: Request):
         target_folder = None
 
         def find_folder(childrens, folder_id):
+            nonlocal target_folder
             for child in childrens:
                 if child["type"] == "folder" and child["id"] == folder_id:
                     target_folder = child
@@ -320,13 +321,13 @@ async def process_folder_new(request: Request):
                 if "contents" in child:
                     find_folder(child["children"], folder_id)
 
-        if request_body.folder_id == "root":
+        if request_body["folder_id"] == "root":
             target_folder = local_store[user_id]
         else:
-            find_folder(local_store[user_id]["contents"], request_body.folder_id)
+            find_folder(local_store[user_id]["contents"], request_body["folder_id"])
 
         if target_folder is None:
-            raise HTTPException(status_code=404, detail="Folder not found")
+            raise HTTPException(status_code=404, detail="Folder not found" + request_body["folder_id"])
         
         return target_folder
             

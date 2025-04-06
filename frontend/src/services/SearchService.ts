@@ -78,7 +78,7 @@ class SearchService {
    * Process a Google Drive folder for indexing
    */
   async processFolder(folderId: string): Promise<ProcessFolderResponse> {
-    return this.request<ProcessFolderResponse>('/process-folder-new', {
+    return this.request<ProcessFolderResponse>('/process-folder', {
       method: 'POST',
       body: JSON.stringify({ folder_id: folderId }),
     });
