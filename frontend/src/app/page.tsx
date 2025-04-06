@@ -204,11 +204,15 @@ export default function Home() {
       {!isAuthenticated ? (
         <div className="flex-1 flex flex-col items-center justify-center">
           <div className="text-center mb-10">
-            <h1 className="text-3xl font-bold text-gray-800 mb-4">Semantic Search for Google Drive</h1>
+            <h1 className="text-3xl font-bold text-gray-800 mb-4">
+              <span style={{ color: '#EA4335' }}> Semantic Search</span> <span style={{ color: '#34A853' }}>for</span> <span style={{ color: '#4285F4' }}>Google Drive</span>
+            </h1>
             <p className="text-lg text-gray-600 mb-8">
               Find what you're looking for, even when you don't know the exact name
             </p>
-            <LoginButton onClick={handleLogin} isLoading={isLoading} />
+            <div className="flex justify-center">
+              <LoginButton onClick={handleLogin} isLoading={isLoading} />
+            </div>
           </div>
         </div>
       ) : (

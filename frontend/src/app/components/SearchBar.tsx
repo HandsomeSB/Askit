@@ -32,7 +32,7 @@ export default function SearchBar({ initialQuery = '', onSearch, isLoading = fal
             type="text"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search your Google Drive semantically (e.g., 'passport photo', 'budget spreadsheet from last month')"
+            placeholder="Try 'passport photo', 'budget spreadsheet from last month'"
             className="w-full h-16 px-6 pr-24 text-lg rounded-full border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent shadow-sm"
             disabled={isLoading}
           />
@@ -56,9 +56,9 @@ export default function SearchBar({ initialQuery = '', onSearch, isLoading = fal
           </button>
         </div>
       </form>
-      <div className="mt-2 text-sm text-gray-500 px-2">
+      {/* <div className="mt-2 text-sm text-gray-500 px-2">
         <p>Try natural language queries like "meeting notes from last week" or "diagram about authentication flow"</p>
-      </div>
+      </div> */}
     </div>
   );
 }
