@@ -20,6 +20,7 @@ export interface FileResult {
     createdTime?: string;
     shared?: boolean;
     parents?: string[];
+    children?: FileResult[];
   }
   
   export interface SearchHistoryItem {
@@ -58,4 +59,10 @@ export interface FileResult {
     authenticated: boolean;
     session_id?: string;
     expires?: string;
+  }
+
+  export interface FileStructureResponse {
+    folder_id: string;
+    folder_details: any;
+    contents: FileResult[];
   }

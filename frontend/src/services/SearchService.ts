@@ -5,7 +5,8 @@ import {
   SessionResponse, 
   AuthUrlResponse, 
   SearchResponse, 
-  VerifySessionResponse 
+  VerifySessionResponse ,
+  FileStructureResponse
 } from '../types/types';
 
 class SearchService {
@@ -94,6 +95,14 @@ class SearchService {
     } catch (error) {
       console.error('Error during logout:', error);
     }
+  }
+
+  /**
+   * Get file structure
+   */
+  async getFileStructure(): Promise<FileStructureResponse> {
+    console.log("Getting file structure");
+    return this.request<FileStructureResponse>('/drive/file-structure');
   }
 }
 

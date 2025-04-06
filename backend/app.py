@@ -189,7 +189,8 @@ async def get_drive_service(request: Request):
         raise HTTPException(status_code=401, detail="Not authenticated with Google Drive")
     
     try:
-        credentials = Credentials.from_json(credentials_json)
+        credentials_info = json.loads(credentials_json)
+        credentials = Credentials.from_authorized_user_info(credentials_info)
         
         # Check if credentials expired and refresh if needed
         if credentials.expired and credentials.refresh_token:
@@ -409,6 +410,181 @@ async def get_drive_folders(request: Request):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+@app.get("/api/drive/folder-structure")
+async def get_folder_structure(request: Request, folder_id: Optional[str] = "root"):
+    """
+    Retrieve the folder structure from the user's Google Drive,
+    starting from the specified folder (or root by default).
+    
+    Parameters:
+    - folder_id: Optional ID of the folder to start traversal from (defaults to root)
+    
+    Returns a nested structure of folders.
+    """
+    try:
+        # Get the authenticated user's drive service
+        drive_service = await get_drive_service(request)
+        
+        # Function to recursively get folders
+        def get_folder_contents(folder_id, depth=0, max_depth=10):
+            if depth > max_depth:  # Prevent excessive recursion
+                return {"truncated": True, "reason": "Max depth reached"}
+                
+            # Get all folders in the current folder
+            query = f"'{folder_id}' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false"
+            
+            folders = []
+            page_token = None
+            
+            while True:
+                response = (
+                    drive_service.files()
+                    .list(
+                        q=query,
+                        spaces="drive",
+                        fields="nextPageToken, files(id, name, mimeType)",
+                        pageToken=page_token,
+                    )
+                    .execute()
+                )
+                
+                folders.extend(response.get("files", []))
+                page_token = response.get("nextPageToken", None)
+                
+                if not page_token:
+                    break
+            
+            # Process and organize the results
+            result = []
+            for folder in folders:
+                result.append({
+                    "id": folder["id"],
+                    "name": folder["name"],
+                    "mimeType": folder["mimeType"],
+                    "children": get_folder_contents(folder["id"], depth + 1, max_depth)  # Recursively get subfolders
+                })
+            return result
+        
+        # Get the folder structure starting from the specified folder_id
+        folder_structure = get_folder_contents(folder_id)
+        return folder_structure
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+        
+
+@app.get("/api/drive/file-structure")
+async def get_file_structure(request: Request, folder_id: Optional[str] = "root"):
+    """
+    Retrieve the complete file structure with metadata from the user's Google Drive,
+    starting from the specified folder (or root by default).
+    
+    Parameters:
+    - folder_id: Optional ID of the folder to start traversal from (defaults to root)
+    
+    Returns a nested structure of folders and files with their metadata.
+    """
+    try:
+        # Get the authenticated user's drive service
+        drive_service = await get_drive_service(request)
+        
+        # Function to recursively get files and folders
+        def get_folder_contents(folder_id, depth=0, max_depth=10):
+            if depth > max_depth:  # Prevent excessive recursion
+                return {"truncated": True, "reason": "Max depth reached"}
+                
+            # Get all files and folders in the current folder
+            query = f"'{folder_id}' in parents and trashed=false"
+            
+            items = []
+            page_token = None
+            
+            while True:
+                response = (
+                    drive_service.files()
+                    .list(
+                        q=query,
+                        spaces="drive",
+                        fields="nextPageToken, files(id, name, mimeType, createdTime, modifiedTime, size, webViewLink, owners, sharingUser, shared, capabilities)",
+                        pageToken=page_token,
+                    )
+                    .execute()
+                )
+                
+                items.extend(response.get("files", []))
+                page_token = response.get("nextPageToken", None)
+                
+                if not page_token:
+                    break
+            
+            # Process and organize the results
+            result = []
+            for item in items:
+                mimeType = item.get("mimeType")
+                
+                item_data = {
+                    "id": item["id"],
+                    "name": item["name"],
+                    "mimeType": item["mimeType"],
+                    "createdTime": item.get("createdTime"),
+                    "modifiedTime": item.get("modifiedTime"),
+                    "size": item.get("size"),
+                    "webViewLink": item.get("webViewLink"),
+                    "shared": item.get("shared", False),
+                    "permissions": {
+                        "canEdit": item.get("capabilities", {}).get("canEdit", False),
+                        "canComment": item.get("capabilities", {}).get("canComment", False),
+                        "canCopy": item.get("capabilities", {}).get("canCopy", False),
+                    }
+                }
+                
+                # Add owner information if available
+                if "owners" in item and item["owners"]:
+                    owner = item["owners"][0]  # Get the primary owner
+                    item_data["owner"] = {
+                        "displayName": owner.get("displayName"),
+                        "emailAddress": owner.get("emailAddress")
+                    }
+                
+                # For folders, recursively get their contents
+                if item["mimeType"] == "application/vnd.google-apps.folder":
+                    item_data["type"] = "folder"
+                    # Only recurse if we haven't reached max depth
+                    if depth < max_depth:
+                        item_data["children"] = get_folder_contents(item["id"], depth + 1, max_depth)
+                else:
+                    item_data["type"] = "file"
+                
+                result.append(item_data)
+            
+            return result
+        
+        # Start the recursive file structure retrieval
+        file_structure = get_folder_contents(folder_id)
+        
+        # Get folder details for the starting folder (if not root)
+        folder_details = None
+        if folder_id != "root":
+            folder_details = drive_service.files().get(
+                fileId=folder_id, 
+                fields="id, name, mimeType, createdTime, modifiedTime"
+            ).execute()
+        
+        return {
+            "folder_id": folder_id,
+            "folder_details": folder_details,
+            "contents": file_structure
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        import traceback
+        print(f"Error retrieving file structure: {str(e)}")
+        print(traceback.format_exc())
+        raise HTTPException(status_code=500, detail=f"Failed to retrieve file structure: {str(e)}")
 
 if __name__ == "__main__":
     uvicorn.run("app:app", host="0.0.0.0", port=8000, reload=True)
