@@ -12,7 +12,7 @@ load_dotenv()
 
 from document_processor import DocumentProcessor
 from indexer import DocumentIndexer
-from query_engine import QueryEngine
+from query_engine import EnhancedQueryEngine
 
 app = FastAPI(title="Document Retrieval System")
 
@@ -29,7 +29,7 @@ app.add_middleware(
 try:
     document_processor = DocumentProcessor()
     document_indexer = DocumentIndexer()
-    query_engine = QueryEngine()
+    query_engine = EnhancedQueryEngine()
     print("Successfully initialized all components")
 except Exception as e:
     print(f"Error initializing components: {str(e)}")
@@ -207,25 +207,33 @@ async def get_drive_folders():
                 detail="Document processor not initialized. Please check server logs for details.",
             )
 
-        # Get the root folder ID (this is the user's Drive root)
-        root_folder_id = "root"
+        try:
+            # Query for all folders in Drive
+            response = (
+                document_processor.drive_service.files()
+                .list(
+                    q="mimeType='application/vnd.google-apps.folder'",
+                    spaces="drive",
+                    fields="files(id, name)",
+                    pageSize=100,
+                )
+                .execute()
+            )
 
-        # Get all folders from the root
-        folders = document_processor.get_files_from_drive(root_folder_id)
+            folders = response.get("files", [])
 
-        # Filter to only include folders (mimeType = 'application/vnd.google-apps.folder')
-        folders = [
-            folder
-            for folder in folders
-            if folder["mimeType"] == "application/vnd.google-apps.folder"
-        ]
+            # Format the response
+            formatted_folders = [
+                {"id": folder["id"], "name": folder["name"]} for folder in folders
+            ]
 
-        # Format the response
-        formatted_folders = [
-            {"id": folder["id"], "name": folder["name"]} for folder in folders
-        ]
+            return formatted_folders
+        except Exception as e:
+            print(f"Error fetching folders: {str(e)}")
+            raise HTTPException(
+                status_code=500, detail=f"Failed to fetch folders: {str(e)}"
+            )
 
-        return formatted_folders
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

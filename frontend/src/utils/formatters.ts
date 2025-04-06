@@ -6,6 +6,10 @@
  * @returns A formatted string representation of the MIME type
  */
 export function formatMimeType(mimeType: string): string {
+  if (!mimeType) {
+    return "Unknown";
+  }
+
   if (mimeType.includes("pdf")) {
     return "PDF";
   } else if (mimeType.includes("word")) {

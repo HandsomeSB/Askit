@@ -17,6 +17,30 @@ from llama_index.core.node_parser import SentenceSplitter
 from llama_index.core.storage.storage_context import SimpleVectorStore
 from llama_index.embeddings.openai import OpenAIEmbedding
 
+# These metadata fields would be included in the text before embedding
+EMBEDDING_METADATA = [
+    "title",  # Document titles often contain important context
+    "author",  # Author names can be semantically relevant
+    "subject",  # Subject/topic information
+    "description",  # Any file descriptions
+    "keywords",  # Keywords/tags
+    "location_name",  # For images/videos (not coordinates)
+    "camera_model",  # For images (as it might indicate quality/type)
+    "file_type",  # General file type (document, image, etc.)
+]
+
+# These would remain as structured data for precise filtering
+FILTERING_METADATA = [
+    "created_time",  # For date range filtering
+    "modified_time",  # For date range filtering
+    "file_size",  # For size filtering
+    "dimensions",  # For image/video size filtering
+    "duration",  # For media length filtering
+    "coordinates",  # For precise location filtering
+    "page_count",  # For document length filtering
+    "bitrate",  # For media quality filtering
+]
+
 
 class DocumentIndexer:
     """
@@ -61,6 +85,37 @@ class DocumentIndexer:
         with open(self.index_map_path, "w") as f:
             json.dump(self.folder_to_index_map, f)
 
+    def _enhance_content_with_metadata(self, document: Document) -> Document:
+        """
+        Enhance document content with relevant metadata for embedding.
+
+        Args:
+            document: Original document
+
+        Returns:
+            Enhanced document with metadata in content
+        """
+        metadata = document.metadata
+        enhanced_content = []
+
+        # Add relevant metadata to content
+        for field in EMBEDDING_METADATA:
+            if field in metadata and metadata[field]:
+                if isinstance(metadata[field], list):
+                    enhanced_content.append(f"{field}: {', '.join(metadata[field])}")
+                else:
+                    enhanced_content.append(f"{field}: {metadata[field]}")
+
+        # Add original content
+        enhanced_content.append("\nContent:")
+        enhanced_content.append(document.text)
+
+        # Create new document with enhanced content
+        return Document(
+            text="\n".join(enhanced_content),
+            metadata=document.metadata,  # Keep original metadata for filtering
+        )
+
     def create_index(self, documents: List[Document], folder_id: str) -> str:
         """
         Create an index from a list of documents.
@@ -79,8 +134,13 @@ class DocumentIndexer:
         vector_store = SimpleVectorStore()
         storage_context = StorageContext.from_defaults(vector_store=vector_store)
 
+        # Enhance documents with metadata
+        enhanced_documents = [
+            self._enhance_content_with_metadata(doc) for doc in documents
+        ]
+
         # Parse documents into nodes (chunks)
-        nodes = self.node_parser.get_nodes_from_documents(documents)
+        nodes = self.node_parser.get_nodes_from_documents(enhanced_documents)
 
         # Create the index
         index = VectorStoreIndex(
