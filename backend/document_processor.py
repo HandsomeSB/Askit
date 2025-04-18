@@ -55,79 +55,7 @@ class DocumentProcessor:
 
         # Use provided drive service or create a new one
         self.drive_service = drive_service
-
-    # Connecting on server side. Remove later
-    def _setup_drive_connection(self):
-        """
-        Set up connection to Google Drive using OAuth2.
-
-        Returns:
-            Google Drive service object
-        """
-
-        SCOPES = ["https://www.googleapis.com/auth/drive.readonly"]
-        creds = None
-
-        # Check if credentials.json exists
-        if not os.path.exists("credentials.json"):
-            print(
-                "ERROR: credentials.json file not found. Please set up Google Drive API credentials."
-            )
-            raise FileNotFoundError(
-                "credentials.json file not found. Please set up Google Drive API credentials."
-            )
-
-        # Load credentials from token.json if available
-        if os.path.exists("token.json"):
-            try:
-                creds = Credentials.from_authorized_user_file("token.json", SCOPES)
-                print("Loaded credentials from token.json")
-            except Exception as e:
-                print(f"Error loading credentials from token.json: {str(e)}")
-                # If token.json is corrupted, we'll create a new one
-
-        # If no valid credentials, authenticate user
-        if not creds or not creds.valid:
-            if creds and creds.expired and creds.refresh_token:
-                try:
-                    creds.refresh(Request())
-                    print("Refreshed expired credentials")
-                except Exception as e:
-                    print(f"Error refreshing credentials: {str(e)}")
-                    # If refresh fails, we'll create new credentials
-                    creds = None
-
-            if not creds:
-                try:
-                    flow = InstalledAppFlow.from_client_secrets_file(
-                        "credentials.json", SCOPES
-                    )
-                    print("Starting OAuth flow for Google Drive authentication")
-                    creds = flow.run_local_server(port=0)
-                    print("Successfully authenticated with Google Drive")
-                except Exception as e:
-                    print(f"Error during OAuth flow: {str(e)}")
-                    raise Exception(
-                        f"Failed to authenticate with Google Drive: {str(e)}"
-                    )
-
-            # Save credentials for next run
-            try:
-                with open("token.json", "w") as token:
-                    token.write(creds.to_json())
-                print("Saved credentials to token.json")
-            except Exception as e:
-                print(f"Error saving credentials to token.json: {str(e)}")
-
-        # Build Drive service
-        try:
-            service = build("drive", "v3", credentials=creds)
-            print("Successfully built Google Drive service")
-            return service
-        except Exception as e:
-            print(f"Error building Google Drive service: {str(e)}")
-            raise Exception(f"Failed to build Google Drive service: {str(e)}")
-
+        
     # This function is scanning all the files in a folder and returning a list of dictonaries each representing a file metadata
     def get_files_from_drive(self, folder_id: str) -> List[Dict[str, Any]]:
         """
@@ -194,142 +122,58 @@ class DocumentProcessor:
             "size": file_metadata.get("size"),
         }
 
+        if mime_type in self.GOOGLE_DOC_MIMETYPES:
+            file_data = self._export_google_file(file_id, mime_type)
+        else:
+            file_data = self._download_file(file_id)
         try:
-            # Handle Google Workspace files (Docs, Sheets, Slides)
+            # For Google Workspace files
             if mime_type in self.GOOGLE_DOC_MIMETYPES:
-                export_type = self.GOOGLE_DOC_MIMETYPES[mime_type]["export_type"]
-                request = self.drive_service.files().export_media(
-                    fileId=file_id, mimeType=export_type
-                )
-                fh = io.BytesIO()
-                downloader = MediaIoBaseDownload(fh, request)
-                done = False
-                while done is False:
-                    status, done = downloader.next_chunk()
-                content = fh.getvalue().decode("utf-8")
-                return [Document(text=content, metadata=base_metadata)]
+                processor_name = self.GOOGLE_DOC_MIMETYPES[mime_type]["processor"]
+                processor_func = getattr(self, processor_name)
+                return processor_func(file_data, base_metadata)
 
-            # Handle regular files (PDF, DOCX, etc.)
-            with tempfile.NamedTemporaryFile(delete=False) as temp_file:
-                try:
-                    # Download the file
-                    request = self.drive_service.files().get_media(fileId=file_id)
-                    fh = io.BytesIO()
-                    downloader = MediaIoBaseDownload(fh, request)
-                    done = False
-                    while done is False:
-                        status, done = downloader.next_chunk()
-
-                    temp_file.write(fh.getvalue())
-                    temp_file_path = temp_file.name
-
-                    # Extract additional metadata based on file type
-                    additional_metadata = FileMetadataExtractor.extract_metadata(
-                        temp_file_path, mime_type
-                    )
-                    base_metadata.update(additional_metadata)
-
-                    # Process the file based on its type
-                    if mime_type == "application/pdf":
-                        try:
-                            docs = self.pdf_reader.load_data(temp_file_path)
-                            for doc in docs:
-                                doc.metadata.update(base_metadata)
-                            return docs
-                        except Exception as pdf_error:
-                            print(
-                                f"Error processing PDF file {file_name}: {str(pdf_error)}"
-                            )
-                            return [
-                                Document(
-                                    text=f"Error processing PDF file: {str(pdf_error)}",
-                                    metadata={**base_metadata, "error": str(pdf_error)},
-                                )
-                            ]
-                    elif mime_type in [
-                        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-                        "application/msword",
-                    ]:
-                        try:
-                            # Load the document first, then add metadata
-                            docs = self.docx_reader.load_data(temp_file_path)
-                            for doc in docs:
-                                doc.metadata.update(base_metadata)
-                            return docs
-                        except Exception as docx_error:
-                            print(
-                                f"Error processing DOCX file {file_name}: {str(docx_error)}"
-                            )
-                            return [
-                                Document(
-                                    text=f"Error processing DOCX file: {str(docx_error)}",
-                                    metadata={
-                                        **base_metadata,
-                                        "error": str(docx_error),
-                                    },
-                                )
-                            ]
-                    elif mime_type in [
-                        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                        "application/vnd.ms-excel",
-                    ]:
-                        return self.excel_reader.load_data(
-                            temp_file_path, metadata=base_metadata
-                        )
-                    elif mime_type.startswith("image/"):
-                        try:
-                            # Special handling for HEIC/HEIF images
-                            if mime_type in ["image/heic", "image/heif"]:
-                                # Open HEIC image
-                                with Image.open(temp_file_path) as heic_img:
-                                    # Create a temporary file for the converted JPEG
-                                    with tempfile.NamedTemporaryFile(
-                                        suffix=".jpg", delete=False
-                                    ) as jpeg_temp:
-                                        # Convert and save as JPEG
-                                        heic_img.save(jpeg_temp.name, "JPEG")
-                                        # Update the temp_file_path to point to the converted image
-                                        temp_file_path = jpeg_temp.name
-
-                            # Load the document first, then add metadata
-                            docs = self.image_reader.load_data(temp_file_path)
-                            for doc in docs:
-                                doc.metadata.update(base_metadata)
-                            return docs
-                        except Exception as image_error:
-                            print(
-                                f"Error processing image file {file_name}: {str(image_error)}"
-                            )
-                            return [
-                                Document(
-                                    text=f"Error processing image file: {str(image_error)}",
-                                    metadata={
-                                        **base_metadata,
-                                        "error": str(image_error),
-                                    },
-                                )
-                            ]
-                    else:
-                        with open(temp_file_path, "r", encoding="utf-8") as f:
-                            content = f.read()
-                        return [Document(text=content, metadata=base_metadata)]
-
-                finally:
-                    # Clean up the temporary file
-                    if "temp_file_path" in locals():
-                        os.unlink(temp_file_path)
-
+            # Check mime type and call appropriate processor
+            if mime_type.startswith('application/pdf'):
+                return self._process_pdf(file_data, base_metadata)
+            elif mime_type in ['application/vnd.openxmlformats-officedocument.wordprocessingml.document']:
+                return self._process_docx(file_data, base_metadata)
+            elif mime_type in ['application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 
+                            'application/vnd.ms-excel']:
+                return self._process_excel(file_data, base_metadata)
+            elif mime_type.startswith('image/'):
+                # Update metadata with image-specific info if available
+                if 'imageMediaMetadata' in file_metadata:
+                    img_meta = file_metadata['imageMediaMetadata'] or {}
+                    base_metadata.update({
+                        'capture_time': img_meta.get('time'),
+                        'camera_make': img_meta.get('cameraMake'),
+                        'camera_model': img_meta.get('cameraModel'),
+                        'width': img_meta.get('width'),
+                        'height': img_meta.get('height'),
+                    })
+                    if 'location' in img_meta and img_meta['location']:
+                        base_metadata.update({
+                            'latitude': img_meta['location'].get('latitude'),
+                            'longitude': img_meta['location'].get('longitude'),
+                        })
+                return self._process_image(file_data, base_metadata)
+            elif mime_type.startswith('audio/'):
+                return self._process_audio(file_data, base_metadata)
+            else:
+                # For other file types, do not process
+                # Return an empty list for unsupported file types
+                print(f"Unsupported file type: {mime_type} for file: {file_name}")
+                return [Document(
+                    text=f"[Unsupported file type: {mime_type}]",
+                    metadata=base_metadata
+                )]
         except Exception as e:
-            print(f"Error processing file {file_name}: {str(e)}")
-            return [
-                Document(
-                    text=f"Error processing file: {str(e)}",
-                    metadata={
-                        **base_metadata,
-                        "error": str(e),
-                    },
-                )
-            ]
+            print(f"Error processing file {file_name}, {mime_type}: {e}")
+            return [Document(
+                text=f"[Error processing file: {file_name}]",
+                metadata=base_metadata
+            )]
 
     def _export_google_file(self, file_id: str, mime_type: str) -> BinaryIO:
         """
@@ -367,7 +211,7 @@ class DocumentProcessor:
 
     def _download_file(self, file_id: str) -> BinaryIO:
         """
-        Download file content from Google Drive.
+        Download non-google work space file content from Google Drive.
 
         Args:
             file_id: Google Drive file ID

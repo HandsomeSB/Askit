@@ -10,15 +10,16 @@ import os
 import secrets
 import json
 import time
+
 from dotenv import load_dotenv
+# Load environment variables from .env file
+load_dotenv()
+
 from google_auth_oauthlib.flow import InstalledAppFlow
 # Rename the imported Request to avoid conflict
 from google.auth.transport.requests import Request as GoogleAuthRequest
 from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
-
-# Load environment variables from .env file
-load_dotenv()
 
 from document_processor import DocumentProcessor
 from indexer import DocumentIndexer
@@ -267,11 +268,6 @@ async def process_folder(request: Request):
                 detail=error_message
             )
         
-        # Store session ID with the documents for user identification
-        session_id = request.session.get("session_id", "anonymous")
-        for doc in documents:
-            doc.metadata["session_id"] = session_id
-        
         # Create index from documents
         try:
             index_id = document_indexer.create_index(documents, folder_id)
@@ -287,7 +283,7 @@ async def process_folder(request: Request):
         response = {
             "status": "success",
             "message": f"Processed {len(files)} files",
-            "index_id": index_id,
+            "index_id": "bro I have no clue what this is",
         }
         
         if failed_files:
