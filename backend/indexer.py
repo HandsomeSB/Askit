@@ -70,14 +70,18 @@ class DocumentIndexer:
         return index
 
     def get_index(self, folder_id: str):
-        """Load index from disk."""
+        """Load index from disk. Return a list of indices."""
         print(folder_id)
         index_path = _find_subdirectory(self.persist_dir, folder_id)
         print(index_path)
 
         storage_context = StorageContext.from_defaults(persist_dir=index_path)
         index = load_index_from_storage(storage_context=storage_context)
-        return index
+
+        subindices = _get_subindices(index_path)
+        subindices.append(index)
+        
+        return subindices
     
     def delete_index(self, folder_id: str) -> bool:
         pass
@@ -109,3 +113,20 @@ def _find_subdirectory(base_dir: str, target_dir: str) -> str:
         raise FileNotFoundError(f"No index found for folder ID: {target_dir}")
     
     return index_path
+
+def _get_subindices(base_dir):
+    subindices = []
+
+    # Search for all directories in the base directory
+    for root, dirs, _ in os.walk(base_dir):
+        for dir_name in dirs:
+            path = os.path.join(root, dir_name)
+            try:
+                storage_context = StorageContext.from_defaults(persist_dir=path)
+                index = load_index_from_storage(storage_context=storage_context)
+                subindices.append(index)
+            except:
+                continue
+            subindices.extend(_get_subindices(path))
+
+    return subindices
