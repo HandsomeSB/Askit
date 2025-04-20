@@ -319,8 +319,13 @@ class EnhancedQueryEngine:
     def query(
         self, query_text: str, folder_id: str
     ) -> Tuple[str, List[Dict[str, Any]]]:
-        query_text, metadata_filters = self._extract_metadata_filters(query_text)
-        results = self.hybrid_query(query_text, folder_id, metadata_filters)
+        # query_text, metadata_filters = self._extract_metadata_filters(query_text)
+        index = self.document_indexer.get_index(folder_id)
+        retriever = index.as_retriever(
+            similarity_top_k=self.top_k,
+            similarity_cutoff=self.similarity_threshold,
+        )
+        results = retriever.retrieve(query_text)
 
         if not results:
             return (
@@ -329,12 +334,12 @@ class EnhancedQueryEngine:
             )
 
         context = "\n\n".join([f"Document: {node.text}" for node in results])
-        prompt = f"""Based on the following documents, please provide a comprehensive answer to the question: {query_text}
-
-Documents:
-{context}
-
-Please provide a very concise answer that synthesizes information from the relevant documents. If the documents don't contain enough information to answer the question, please say so."""
+        prompt = f"""Based on the following documents, 
+        please provide a comprehensive answer to the question: {query_text}
+        Documents: {context}
+        Please provide a very concise answer that synthesizes information 
+        from the relevant documents. If the documents don't contain enough 
+        information to answer the question, please say so."""
 
         answer = self.llm.complete(prompt).text
 
@@ -349,5 +354,7 @@ Please provide a very concise answer that synthesizes information from the relev
             }
             for node in results
         ]
+
+        print(answer, sources)
 
         return answer, sources
