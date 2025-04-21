@@ -2,13 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useSearchService } from '../../services/SearchService';
-
-interface Folder {
-  id: string;
-  name: string;
-  children: Folder[];
-  
-}
+import { FolderMetaManager, Folder} from '../models/FolderMetaManager';
 
 export default function FolderManager({ 
   onFolderSelect,
@@ -23,6 +17,7 @@ export default function FolderManager({
   const [error, setError] = useState<string | null>(null);
   const [processingStatus, setProcessingStatus] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(false);
+  const [folderMetaManager] = useState(() => new FolderMetaManager());
 
   const searchService = useSearchService();
 
@@ -41,13 +36,14 @@ export default function FolderManager({
     
     try {
       const response = await searchService.getFolderStructure();
-      // Filter only folders from the contents
-      const folders = response.map(folder => ({
-        id: folder.id,
-        name: folder.name
+      // Add processed: false by default if not present
+      const folders = response.map((folder) => ({
+        ...folder,
+        processed: false,
       }));
+      folderMetaManager.setFolders(folders);
 
-      setFolders(folders);
+      setFolders(folderMetaManager.getFolderStructure());
     } catch (err: any) {
       setError('Failed to load folders: ' + (err.message || 'Unknown error'));
     } finally {
@@ -72,9 +68,12 @@ export default function FolderManager({
     try {
       const response = await searchService.processFolder(folderId);
       setProcessingStatus(response.message);
-      
-      // Reload folders to get updated list
-      await loadFolders();
+
+      if (response.status === 'success') {
+        folderMetaManager.updateProcessedState(folderId, true);
+        setFolders(folderMetaManager.getFolderStructure());
+      }
+
     } catch (err: any) {
       const errorMessage = err.data?.detail || err.message || 'Unknown error';
       setError(`Failed to process folder: ${errorMessage}`);
@@ -145,19 +144,28 @@ export default function FolderManager({
                 </button>
               </div>
               
+              {/* Process button */}
               <div className="ml-2">
-                <button
-                  onClick={(event) => handleProcessFolder(folder.id, event)}
-                  disabled={processingFolders.has(folder.id)}
-                  className="px-3 py-1 text-sm text-blue-600 hover:bg-blue-50 rounded disabled:opacity-50"
-                >
-                  {processingFolders.has(folder.id) ? (
-                    <span className="flex items-center">
-                      <span className="animate-spin h-4 w-4 mr-2 border-b-2 border-blue-500 rounded-full"></span>
-                      Processing...
+                {folder.processed ? (
+                  <div className="px-3 py-1 text-green-600">
+                    <span style={{ color: 'green', fontSize: '24px' }}>
+                      ✓
                     </span>
-                  ) : 'Process'}
-                </button>
+                  </div>
+                ) : (
+                  <button
+                    onClick={(event) => handleProcessFolder(folder.id, event)}
+                    disabled={processingFolders.has(folder.id)}
+                    className="px-3 py-1 text-sm text-blue-600 hover:bg-blue-50 rounded disabled:opacity-50"
+                  >
+                    {processingFolders.has(folder.id) ? (
+                      <span className="flex items-center">
+                        <span className="animate-spin h-4 w-4 mr-2 border-b-2 border-blue-500 rounded-full"></span>
+                        Processing...
+                      </span>
+                    ) : 'Process'}
+                  </button>
+                )}
               </div>
             </div>
           ))
