@@ -18,6 +18,7 @@ export default function FolderManager({
   const [processingStatus, setProcessingStatus] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [folderMetaManager] = useState(() => new FolderMetaManager());
+  const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set());
 
   const searchService = useSearchService();
 
@@ -56,6 +57,19 @@ export default function FolderManager({
     onFolderSelect(folderId);
   };
 
+  const toggleFolderExpand = (folderId: string, event: React.MouseEvent) => {
+    event.stopPropagation();
+    setExpandedFolders(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(folderId)) {
+        newSet.delete(folderId);
+      } else {
+        newSet.add(folderId);
+      }
+      return newSet;
+    });
+  };
+
   const handleProcessFolder = async (folderId: string, event: React.MouseEvent) => {
     console.log("handleProcessFolder called with folderId:", folderId);
     event.stopPropagation();
@@ -84,6 +98,72 @@ export default function FolderManager({
         return newSet;
       });
     }
+  };
+
+  // Recursive function to render folders and their children
+  const renderFolder = (folder: Folder) => {
+    const isExpanded = expandedFolders.has(folder.id);
+    const hasChildren = folder.children && folder.children.length > 0;
+    
+    return (
+      <div key={folder.id} className="folder-item">
+        <div 
+          className={`flex items-center justify-between p-2 rounded ${
+            selectedFolder === folder.id ? 'bg-blue-50' : 'hover:bg-gray-50'
+          }`}
+        >
+          <div className="flex-1 flex items-center">
+            {hasChildren && (
+              <button
+                onClick={(event) => toggleFolderExpand(folder.id, event)}
+                className="mr-2 w-5 h-5 flex items-center justify-center text-gray-500 hover:text-gray-700"
+              >
+                {isExpanded ? '▼' : '►'}
+              </button>
+            )}
+            <button
+              onClick={() => handleFolderSelect(folder.id)}
+              className="flex-1 text-left px-2 py-1"
+            >
+              {folder.name}
+            </button>
+          </div>
+          
+          {/* Process button */}
+          <div className="ml-2">
+            {folder.processed ? (
+              <div className="px-3 py-1 text-green-600">
+                <span style={{ color: 'green', fontSize: '24px' }}>
+                  ✓
+                </span>
+              </div>
+            ) : (
+              <button
+                onClick={(event) => handleProcessFolder(folder.id, event)}
+                disabled={processingFolders.has(folder.id)}
+                className="px-3 py-1 text-sm text-blue-600 hover:bg-blue-50 rounded disabled:opacity-50"
+              >
+                {processingFolders.has(folder.id) ? (
+                  <span className="flex items-center">
+                    <span className="animate-spin h-4 w-4 mr-2 border-b-2 border-blue-500 rounded-full"></span>
+                    Processing...
+                  </span>
+                ) : 'Process'}
+              </button>
+            )}
+          </div>
+        </div>
+        
+        {/* Render children if expanded */}
+        {isExpanded && hasChildren && (
+          <div className="ml-6 border-l border-gray-200 pl-2 mt-1">
+            {folder.children.map((childFolder) => (
+              renderFolder(childFolder)
+            ))}
+          </div>
+        )}
+      </div>
+    );
   };
 
   if (!parentIsAuthenticated) {
@@ -128,47 +208,7 @@ export default function FolderManager({
             No folders available. Select a folder to process.
           </p>
         ) : (
-          folders.map((folder) => (
-            <div 
-              key={folder.id}
-              className={`flex items-center justify-between p-2 rounded ${
-                selectedFolder === folder.id ? 'bg-blue-50' : 'hover:bg-gray-50'
-              }`}
-            >
-              <div className="flex-1">
-                <button
-                  onClick={() => handleFolderSelect(folder.id)}
-                  className="w-full text-left px-2 py-1"
-                >
-                  {folder.name}
-                </button>
-              </div>
-              
-              {/* Process button */}
-              <div className="ml-2">
-                {folder.processed ? (
-                  <div className="px-3 py-1 text-green-600">
-                    <span style={{ color: 'green', fontSize: '24px' }}>
-                      ✓
-                    </span>
-                  </div>
-                ) : (
-                  <button
-                    onClick={(event) => handleProcessFolder(folder.id, event)}
-                    disabled={processingFolders.has(folder.id)}
-                    className="px-3 py-1 text-sm text-blue-600 hover:bg-blue-50 rounded disabled:opacity-50"
-                  >
-                    {processingFolders.has(folder.id) ? (
-                      <span className="flex items-center">
-                        <span className="animate-spin h-4 w-4 mr-2 border-b-2 border-blue-500 rounded-full"></span>
-                        Processing...
-                      </span>
-                    ) : 'Process'}
-                  </button>
-                )}
-              </div>
-            </div>
-          ))
+          folders.map((folder) => renderFolder(folder))
         )}
       </div>
     </div>
