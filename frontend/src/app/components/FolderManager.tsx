@@ -6,6 +6,8 @@ import { useSearchService } from '../../services/SearchService';
 interface Folder {
   id: string;
   name: string;
+  children: Folder[];
+  
 }
 
 export default function FolderManager({ 
@@ -38,14 +40,13 @@ export default function FolderManager({
     setIsLoading(true);
     
     try {
-      const response = await searchService.getFileStructure();
+      const response = await searchService.getFolderStructure();
       // Filter only folders from the contents
-      const folders = response.contents.filter(item => 
-        item.mimeType === 'application/vnd.google-apps.folder'
-      ).map(folder => ({
+      const folders = response.map(folder => ({
         id: folder.id,
         name: folder.name
       }));
+
       setFolders(folders);
     } catch (err: any) {
       setError('Failed to load folders: ' + (err.message || 'Unknown error'));

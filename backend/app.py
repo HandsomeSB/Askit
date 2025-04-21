@@ -436,8 +436,6 @@ async def get_folder_structure(request: Request, folder_id: Optional[str] = "roo
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-        
-
 @app.get("/api/drive/file-structure")
 async def get_file_structure(request: Request, folder_id: Optional[str] = "root"):
     """

@@ -322,7 +322,7 @@ class EnhancedQueryEngine:
     ) -> Tuple[str, List[Dict[str, Any]]]:
         # query_text, metadata_filters = self._extract_metadata_filters(query_text)
         indices = self.document_indexer.get_index(folder_id)
-
+        
         retrievers = [idx.as_retriever(
             similarity_top_k=self.top_k,
             similarity_cutoff=self.similarity_threshold,

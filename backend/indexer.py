@@ -42,7 +42,8 @@ class DocumentIndexer:
         self.persist_dir = persist_dir
         self.embedding_model = OpenAIEmbedding()
         self.node_parser = SemanticSplitterNodeParser(
-            chunk_size=1024,
+            chunk_size=512,
+            chunk_overlap=48, 
             embed_model=self.embedding_model
         )
 
@@ -54,8 +55,10 @@ class DocumentIndexer:
         """Convert documents to index and save to disk."""
         storage_context = StorageContext.from_defaults(vector_store=self.vector_store)
 
-        index = VectorStoreIndex.from_documents(
-            documents, 
+        nodes = self.node_parser.get_nodes_from_documents(documents)
+
+        index = VectorStoreIndex(
+            nodes, 
             storage_context=storage_context, 
             embed_model=self.embedding_model
         )
