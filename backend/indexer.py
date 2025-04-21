@@ -11,6 +11,9 @@ from llama_index.core.node_parser import SemanticSplitterNodeParser
 from llama_index.core.storage.storage_context import SimpleVectorStore
 from llama_index.embeddings.openai import OpenAIEmbedding
 
+import google_drive_utils
+from datetime import datetime
+
 EMBEDDING_METADATA = [
     "title",
     "author",
@@ -39,121 +42,94 @@ class DocumentIndexer:
         self.persist_dir = persist_dir
         self.embedding_model = OpenAIEmbedding()
         self.node_parser = SemanticSplitterNodeParser(
-            chunk_size=1024,
+            chunk_size=512,
+            chunk_overlap=48, 
             embed_model=self.embedding_model
         )
 
         os.makedirs(persist_dir, exist_ok=True)
 
-        self.index_map_path = os.path.join(persist_dir, "index_map.json")
-        self.folder_to_index_map = self._load_index_map()
-        self.indices = {}
+        self.vector_store = SimpleVectorStore()
 
-    def _load_index_map(self) -> Dict[str, str]:
-        if os.path.exists(self.index_map_path):
-            with open(self.index_map_path, "r") as f:
-                return json.load(f)
-        else:
-            return {}
+    def create_index(self, documents: List[Document], folder_id: str, absolute_id_path: str) -> VectorStoreIndex:
+        """Convert documents to index and save to disk."""
+        storage_context = StorageContext.from_defaults(vector_store=self.vector_store)
 
-    def _save_index_map(self):
-        with open(self.index_map_path, "w") as f:
-            json.dump(self.folder_to_index_map, f)
-
-    def _enhance_content_with_metadata(self, document: Document) -> Document:
-        metadata = document.metadata
-        enhanced_content = []
-        MAX_METADATA_BLOCK_LENGTH = 800
-
-        meta_lines = []
-        for field in EMBEDDING_METADATA:
-            if field in metadata and metadata[field]:
-                value = metadata[field]
-                if isinstance(value, list):
-                    value = ", ".join(value)
-                value = str(value)
-                meta_lines.append(f"{field}: {value}")
-
-        metadata_text = "\n".join(meta_lines)
-        if len(metadata_text) > MAX_METADATA_BLOCK_LENGTH:
-            metadata_text = metadata_text[:MAX_METADATA_BLOCK_LENGTH] + "..."
-
-        final_text = f"{metadata_text}\n\nContent:\n{document.text}"
-
-        return Document(
-            text=final_text,
-            metadata=document.metadata,
-        )
-
-    def create_index(self, documents: List[Document], folder_id: str) -> str:
-        index_id = f"index_{folder_id.replace('-', '_')}"
-        vector_store = SimpleVectorStore()
-        storage_context = StorageContext.from_defaults(vector_store=vector_store)
-
-        enhanced_documents = [
-            self._enhance_content_with_metadata(doc) for doc in documents
-        ]
-        nodes = self.node_parser.get_nodes_from_documents(enhanced_documents)
+        nodes = self.node_parser.get_nodes_from_documents(documents)
 
         index = VectorStoreIndex(
-            nodes, storage_context=storage_context, embed_model=self.embedding_model
+            nodes, 
+            storage_context=storage_context, 
+            embed_model=self.embedding_model
         )
 
-        self.folder_to_index_map[folder_id] = index_id
-        self.indices[folder_id] = index
-        self._save_index_map()
+        index.metadata = {
+            "folder_id": folder_id,
+            "absolute_path": absolute_id_path,
+            "time_indexed": datetime.now().isoformat(),
+        }
 
-        index_dir = os.path.join(self.persist_dir, index_id)
-        os.makedirs(index_dir, exist_ok=True)
-        index.storage_context.persist(persist_dir=index_dir)
-
-        return index_id
+        index.storage_context.persist(persist_dir=self.persist_dir + f"/{absolute_id_path}")
+        return index
 
     def get_index(self, folder_id: str):
-        if folder_id not in self.folder_to_index_map:
-            return None
+        """Load index from disk. Return a list of indices."""
+        print(folder_id)
+        index_path = _find_subdirectory(self.persist_dir, folder_id)
+        print(index_path)
 
-        if folder_id in self.indices:
-            return self.indices[folder_id]
+        storage_context = StorageContext.from_defaults(persist_dir=index_path)
+        index = load_index_from_storage(storage_context=storage_context)
 
-        index_id = self.folder_to_index_map[folder_id]
-        index_dir = os.path.join(self.persist_dir, index_id)
-
-        try:
-            storage_context = StorageContext.from_defaults(persist_dir=index_dir)
-            index = load_index_from_storage(
-                storage_context=storage_context, embed_model=self.embedding_model
-            )
-
-            self.indices[folder_id] = index
-            return index
-        except Exception:
-            del self.folder_to_index_map[folder_id]
-            self._save_index_map()
-            return None
-
+        subindices = _get_subindices(index_path)
+        subindices.append(index)
+        
+        return subindices
+    
     def delete_index(self, folder_id: str) -> bool:
-        if folder_id not in self.folder_to_index_map:
-            return False
+        pass
 
-        index_id = self.folder_to_index_map[folder_id]
-        index_dir = os.path.join(self.persist_dir, index_id)
+def _find_subdirectory(base_dir: str, target_dir: str) -> str:
+    """
+    Search for a subdirectory with the name target_dir within base_dir.
+    If found, return the full path to that subdirectory.
+    If not found, raise a FileNotFoundError.
+    Args:
+        base_dir (str): The base directory to search in.
+        target_dir (str): The name of the subdirectory to find.
+    Returns:
+        str: The full path to the found subdirectory.
+    """
+    index_path = None
 
-        try:
-            if os.path.exists(index_dir):
-                import shutil
+    # Search for a directory with name equal to folder_id
+    for root, dirs, _ in os.walk(base_dir):
+        for dir_name in dirs:
+            if dir_name == target_dir:
+                index_path = os.path.join(root, dir_name)
+                break  # Exit the inner loop once found
+        if index_path:
+            break  # Exit the outer loop once found
 
-                shutil.rmtree(index_dir)
+    if not index_path:
+        # If no matching directory is found, raise an error
+        raise FileNotFoundError(f"No index found for folder ID: {target_dir}")
+    
+    return index_path
 
-            del self.folder_to_index_map[folder_id]
-            if folder_id in self.indices:
-                del self.indices[folder_id]
-            self._save_index_map()
+def _get_subindices(base_dir):
+    subindices = []
 
-            return True
-        except Exception:
-            del self.folder_to_index_map[folder_id]
-            if folder_id in self.indices:
-                del self.indices[folder_id]
-            self._save_index_map()
-            return False
+    # Search for all directories in the base directory
+    for root, dirs, _ in os.walk(base_dir):
+        for dir_name in dirs:
+            path = os.path.join(root, dir_name)
+            try:
+                storage_context = StorageContext.from_defaults(persist_dir=path)
+                index = load_index_from_storage(storage_context=storage_context)
+                subindices.append(index)
+            except:
+                continue
+            subindices.extend(_get_subindices(path))
+
+    return subindices

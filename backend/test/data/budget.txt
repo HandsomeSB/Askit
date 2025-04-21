@@ -1,0 +1,3 @@
+Budget for Paris: 650
+Budget for Shanghai: 1240
+Budget for New York: 2204

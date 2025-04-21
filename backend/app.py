@@ -10,19 +10,21 @@ import os
 import secrets
 import json
 import time
+
 from dotenv import load_dotenv
+# Load environment variables from .env file
+load_dotenv()
+
 from google_auth_oauthlib.flow import InstalledAppFlow
 # Rename the imported Request to avoid conflict
 from google.auth.transport.requests import Request as GoogleAuthRequest
 from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
 
-# Load environment variables from .env file
-load_dotenv()
-
 from document_processor import DocumentProcessor
 from indexer import DocumentIndexer
 from query_engine import EnhancedQueryEngine
+import google_drive_utils
 
 app = FastAPI(title="Document Retrieval System")
 
@@ -220,79 +222,15 @@ async def process_folder(request: Request):
             raise HTTPException(status_code=400, detail="folder_id is required")
         
         folder_id = request_body["folder_id"]
+
+        response, total_files = google_drive_utils.index_folder(
+            drive_service=drive_service,
+            document_indexer=document_indexer,
+            folder_id=folder_id,
+        )
         
-        # Create a DocumentProcessor with the user's drive service
-        user_document_processor = DocumentProcessor(drive_service=drive_service)
-        
-        # Get all files from the folder
-        try:
-            files = user_document_processor.get_files_from_drive(folder_id)
-            if not files:
-                raise HTTPException(
-                    status_code=400,
-                    detail="No files found in the specified folder"
-                )
-        except Exception as drive_error:
-            print(f"Error accessing Google Drive: {str(drive_error)}")
-            import traceback
-            print(traceback.format_exc())
-            raise HTTPException(
-                status_code=500,
-                detail=f"Failed to access Google Drive: {str(drive_error)}",
-            )
-        
-        # Process each file and convert to documents
-        documents = []
-        failed_files = []
-        for file in files:
-            try:
-                file_documents = user_document_processor.process_file(file)
-                if file_documents:
-                    documents.extend(file_documents)
-                else:
-                    failed_files.append(f"{file.get('name', 'unknown')} (no content extracted)")
-            except Exception as file_error:
-                print(f"Error processing file {file.get('name', 'unknown')}: {str(file_error)}")
-                import traceback
-                print(traceback.format_exc())
-                failed_files.append(f"{file.get('name', 'unknown')} ({str(file_error)})")
-                continue
-        
-        if not documents:
-            error_message = "No documents were successfully processed from the folder."
-            if failed_files:
-                error_message += f" Failed files: {', '.join(failed_files)}"
-            raise HTTPException(
-                status_code=500,
-                detail=error_message
-            )
-        
-        # Store session ID with the documents for user identification
-        session_id = request.session.get("session_id", "anonymous")
-        for doc in documents:
-            doc.metadata["session_id"] = session_id
-        
-        # Create index from documents
-        try:
-            index_id = document_indexer.create_index(documents, folder_id)
-        except Exception as index_error:
-            print(f"Error creating index: {str(index_error)}")
-            import traceback
-            print(traceback.format_exc())
-            raise HTTPException(
-                status_code=500, 
-                detail=f"Failed to create index: {str(index_error)}"
-            )
-        
-        response = {
-            "status": "success",
-            "message": f"Processed {len(files)} files",
-            "index_id": index_id,
-        }
-        
-        if failed_files:
-            response["failed_files"] = failed_files
-            
+        print(response["message"])
+
         return response
         
     except HTTPException:
@@ -497,8 +435,6 @@ async def get_folder_structure(request: Request, folder_id: Optional[str] = "roo
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
-
-        
 
 @app.get("/api/drive/file-structure")
 async def get_file_structure(request: Request, folder_id: Optional[str] = "root"):
