@@ -36,13 +36,7 @@ export default function FolderManager({
     setIsLoading(true);
     
     try {
-      const response = await searchService.getFolderStructure();
-      // Add processed: false by default if not present
-      const folders = response.map((folder) => ({
-        ...folder,
-        processed: false,
-      }));
-      folderMetaManager.setFolders(folders);
+      await folderMetaManager.fetchFolderMeta();
 
       setFolders(folderMetaManager.getFolderStructure());
     } catch (err: any) {
@@ -85,6 +79,7 @@ export default function FolderManager({
 
       if (response.status === 'success') {
         folderMetaManager.updateProcessedState(folderId, true);
+        await folderMetaManager.refreshFolderMeta();
         setFolders(folderMetaManager.getFolderStructure());
       }
 
@@ -157,7 +152,7 @@ export default function FolderManager({
         {/* Render children if expanded */}
         {isExpanded && hasChildren && (
           <div className="ml-6 border-l border-gray-200 pl-2 mt-1">
-            {folder.children.map((childFolder) => (
+            {folder.children?.map((childFolder) => (
               renderFolder(childFolder)
             ))}
           </div>

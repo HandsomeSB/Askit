@@ -156,7 +156,7 @@ def index_folder(drive_service, document_indexer, folder_id, absolute_id_path=No
     response = {
         "status": "success",
         "message": f"Processed {total_files} items",
-        "index_id": "bro I have no clue what this is",
+        "index_id": "bro I have no clue what this is", # NOTE, fix
     }
     
     if failed_files:

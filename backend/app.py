@@ -124,7 +124,6 @@ async def get_auth_url(request: Request):
     
     return {"url": auth_url, "state": state}
 
-
 @app.post("/api/auth/google-callback")
 async def auth_callback(request: Request):
     """Handle OAuth callback from frontend"""
@@ -181,7 +180,6 @@ async def auth_callback(request: Request):
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Failed to exchange auth code: {str(e)}")
 
-
 # Dependency to get drive service with user credentials
 async def get_drive_service(request: Request):
     """Get Google Drive service for authenticated user"""
@@ -204,7 +202,6 @@ async def get_drive_service(request: Request):
         return drive_service
     except Exception as e:
         raise HTTPException(status_code=401, detail=f"Authentication error: {str(e)}")
-
 
 @app.post("/api/process-folder")
 async def process_folder(request: Request):
@@ -240,7 +237,6 @@ async def process_folder(request: Request):
         print(f"Unexpected error in process_folder: {str(e)}")
         print(traceback.format_exc())
         raise HTTPException(status_code=500, detail=str(e))
-
 
 @app.post("/api/query", response_model=QueryResponse)
 async def query(request: Request, query_request: QueryRequest):
@@ -286,6 +282,7 @@ async def query(request: Request, query_request: QueryRequest):
         raise HTTPException(status_code=500, detail=f"Unexpected error: {str(e)}")
 
 
+
 @app.get("/api/auth/check")
 async def check_auth(request: Request):
     """
@@ -312,7 +309,6 @@ async def check_auth(request: Request):
         print(f"Error checking authentication: {str(e)}")
         return {"authenticated": False, "error": str(e)}
 
-
 @app.post("/api/auth/logout")
 async def logout(request: Request):
     """
@@ -324,54 +320,6 @@ async def logout(request: Request):
         return {"success": True, "message": "Successfully logged out"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error during logout: {str(e)}")
-
-
-@app.get("/api/folders")
-async def get_drive_folders(request: Request):
-    """
-    Get all folders from the authenticated user's Google Drive.
-    """
-    try:
-        # Get the authenticated user's drive service
-        drive_service = await get_drive_service(request)
-        
-        # Get the root folder ID (this is the user's Drive root)
-        root_folder_id = "root"
-        
-        # Query files within the specified folder
-        query = f"mimeType='application/vnd.google-apps.folder' and trashed=false"
-        
-        files = []
-        page_token = None
-        
-        while True:
-            response = (
-                drive_service.files()
-                .list(
-                    q=query,
-                    spaces="drive",
-                    fields="nextPageToken, files(id, name, mimeType)",
-                    pageToken=page_token,
-                )
-                .execute()
-            )
-            
-            files.extend(response.get("files", []))
-            page_token = response.get("nextPageToken", None)
-            
-            if not page_token:
-                break
-        
-        # Format the response
-        formatted_folders = [
-            {"id": folder["id"], "name": folder["name"]} for folder in files
-        ]
-        
-        return formatted_folders
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/api/drive/folder-structure")
 async def get_folder_structure(request: Request, folder_id: Optional[str] = "root"):
@@ -405,7 +353,7 @@ async def get_folder_structure(request: Request, folder_id: Optional[str] = "roo
                     .list(
                         q=query,
                         spaces="drive",
-                        fields="nextPageToken, files(id, name, mimeType)",
+                        fields="nextPageToken, files(id, name, mimeType, modifiedTime)",
                         pageToken=page_token,
                     )
                     .execute()
@@ -423,13 +371,45 @@ async def get_folder_structure(request: Request, folder_id: Optional[str] = "roo
                 result.append({
                     "id": folder["id"],
                     "name": folder["name"],
-                    "children": get_folder_contents(folder["id"], depth + 1, max_depth)  # Recursively get subfolders
+                    "modifiedTime": folder.get("modifiedTime"),  
+                    "children": get_folder_contents(folder["id"], depth + 1, max_depth),  # Recursively get subfolders
                 })
             return result
         
         # Get the folder structure starting from the specified folder_id
         folder_structure = get_folder_contents(folder_id)
         return folder_structure
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/drive/index-meta")
+async def get_index_meta(request: Request, folder_id: Optional[str] = "root"):
+    """
+    Retrieve metadata of indexed files in the user's Google Drive,
+    starting from the specified folder (or root by default).
+    
+    Parameters:
+    - folder_id: Optional ID of the folder to start traversal from (defaults to root)
+    
+    Returns a tree of indexed directories and index metadata.
+    """
+    try:
+        # Get the authenticated user's drive service
+        drive_service = await get_drive_service(request)
+
+        # If folder_id is "root", get the actual folder ID
+        if folder_id == "root":
+            # Fetch the root folder's actual ID
+            file = drive_service.files().get(
+                fileId="root",
+                fields="id"
+            ).execute()
+            folder_id = file.get("id")
+        
+        index = document_indexer.get_index_structure(folder_id)
+        return index
     except HTTPException:
         raise
     except Exception as e:
@@ -545,6 +525,54 @@ async def get_file_structure(request: Request, folder_id: Optional[str] = "root"
         print(f"Error retrieving file structure: {str(e)}")
         print(traceback.format_exc())
         raise HTTPException(status_code=500, detail=f"Failed to retrieve file structure: {str(e)}")
+
+@app.get("/api/folders")
+async def get_drive_folders(request: Request):
+    """
+    Get all folders from the authenticated user's Google Drive.
+    """
+    try:
+        # Get the authenticated user's drive service
+        drive_service = await get_drive_service(request)
+        
+        # Get the root folder ID (this is the user's Drive root)
+        root_folder_id = "root"
+        
+        # Query files within the specified folder
+        query = f"mimeType='application/vnd.google-apps.folder' and trashed=false"
+        
+        files = []
+        page_token = None
+        
+        while True:
+            response = (
+                drive_service.files()
+                .list(
+                    q=query,
+                    spaces="drive",
+                    fields="nextPageToken, files(id, name, mimeType)",
+                    pageToken=page_token,
+                )
+                .execute()
+            )
+            
+            files.extend(response.get("files", []))
+            page_token = response.get("nextPageToken", None)
+            
+            if not page_token:
+                break
+        
+        # Format the response
+        formatted_folders = [
+            {"id": folder["id"], "name": folder["name"]} for folder in files
+        ]
+        
+        return formatted_folders
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 
 if __name__ == "__main__":
     uvicorn.run("app:app", host="0.0.0.0", port=8000, reload=True)

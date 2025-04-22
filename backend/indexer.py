@@ -95,38 +95,43 @@ class DocumentIndexer:
         pass
 
     # NOTE, Change implementation for database
-    def get_index_structure(self, start_path: str) -> List[Dict[str, Any]]:
+    def get_index_structure(self, folder_id: str) -> List[Dict[str, Any]]:
         """Get the index structure of the folder."""
-        result = []
-        
-        if not os.path.exists(start_path):
-            return result
+        start_path = _find_subdirectory(self.persist_dir, folder_id)
+        if not start_path:
+            raise FileNotFoundError(f"No index found for folder ID: {folder_id}")
+        return _get_index_structure(start_path)
 
-        # Loop through all directories within the start path
-        for item in os.listdir(start_path):
-            item_path = os.path.join(start_path, item)
-            
-            if os.path.isdir(item_path):
-                # Check for metadata file
-                metadata_path = os.path.join(item_path, "metadata.json")
-                metadata = {}
-                
-                if os.path.exists(metadata_path):
-                    try:
-                        with open(metadata_path, "r") as f:
-                            metadata = json.load(f)
-                    except json.JSONDecodeError:
-                        # Handle invalid metadata files
-                        pass
-                
-                # Create node for this directory
-                dir_info = metadata.copy()
-                dir_info["children"] = self.get_index_structure(item_path)  # Recursively process subdirectories
-                
-                result.append(dir_info)
-
+def _get_index_structure(start_path: str) -> List[Dict[str, Any]]:
+    """Get the index structure of the folder."""
+    result = []
+    if not os.path.exists(start_path):
         return result
 
+    # Loop through all directories within the start path
+    for item in os.listdir(start_path):
+        item_path = os.path.join(start_path, item)
+
+        if os.path.isdir(item_path):
+            # Check for metadata file
+            metadata_path = os.path.join(item_path, "metadata.json")
+            metadata = {}
+            
+            if os.path.exists(metadata_path):
+                try:
+                    with open(metadata_path, "r") as f:
+                        metadata = json.load(f)
+                except json.JSONDecodeError:
+                    # Handle invalid metadata files
+                    pass
+            
+            # Create node for this directory
+            dir_info = metadata.copy()
+            dir_info["children"] = _get_index_structure(item_path)  # Recursively process subdirectories
+            
+            result.append(dir_info)
+
+    return result
 
 def _find_subdirectory(base_dir: str, target_dir: str) -> str:
     """
