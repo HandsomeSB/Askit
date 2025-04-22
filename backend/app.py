@@ -423,7 +423,6 @@ async def get_folder_structure(request: Request, folder_id: Optional[str] = "roo
                 result.append({
                     "id": folder["id"],
                     "name": folder["name"],
-                    "mimeType": folder["mimeType"],
                     "children": get_folder_contents(folder["id"], depth + 1, max_depth)  # Recursively get subfolders
                 })
             return result
