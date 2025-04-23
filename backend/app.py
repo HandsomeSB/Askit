@@ -61,7 +61,7 @@ auth_states = {}
 try:
     document_processor = DocumentProcessor()
     document_indexer = DocumentIndexer()
-    query_engine = EnhancedQueryEngine()
+    query_engine = EnhancedQueryEngine(10, 0.5)
     print("Successfully initialized all components")
 except Exception as e:
     print(f"Error initializing components: {str(e)}")
@@ -281,8 +281,6 @@ async def query(request: Request, query_request: QueryRequest):
         import traceback
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Unexpected error: {str(e)}")
-
-
 
 @app.get("/api/auth/check")
 async def check_auth(request: Request):

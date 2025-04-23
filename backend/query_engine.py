@@ -324,12 +324,12 @@ class EnhancedQueryEngine:
         indices = self.document_indexer.get_index(folder_id)
         
         retrievers = [idx.as_retriever(
-            similarity_top_k=self.top_k,
             similarity_cutoff=self.similarity_threshold,
         ) for idx in indices]
 
         retriever = QueryFusionRetriever(
             retrievers,
+            similarity_top_k=self.top_k,
             use_async=False,
         )
 
