@@ -10,6 +10,7 @@ import os
 import secrets
 import json
 import time
+from datetime import datetime
 
 from dotenv import load_dotenv
 # Load environment variables from .env file
@@ -321,6 +322,7 @@ async def logout(request: Request):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error during logout: {str(e)}")
 
+# NOTE, folder modified time doesn't mean any of the files is modified. Its on new files or move files
 @app.get("/api/drive/folder-structure")
 async def get_folder_structure(request: Request, folder_id: Optional[str] = "root"):
     """
@@ -330,7 +332,7 @@ async def get_folder_structure(request: Request, folder_id: Optional[str] = "roo
     Parameters:
     - folder_id: Optional ID of the folder to start traversal from (defaults to root)
     
-    Returns a nested structure of folders.
+    Returns a nested structure of folders with the most recent modification time of any file within each folder.
     """
     try:
         # Get the authenticated user's drive service
@@ -342,38 +344,46 @@ async def get_folder_structure(request: Request, folder_id: Optional[str] = "roo
                 return {"truncated": True, "reason": "Max depth reached"}
                 
             # Get all folders in the current folder
-            query = f"'{folder_id}' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false"
-            
+            folders_query = f"'{folder_id}' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false"
             folders = []
-            page_token = None
-            
-            while True:
-                response = (
-                    drive_service.files()
-                    .list(
-                        q=query,
-                        spaces="drive",
-                        fields="nextPageToken, files(id, name, mimeType, modifiedTime)",
-                        pageToken=page_token,
-                    )
-                    .execute()
+            google_drive_utils.fileQueryLoop(
+                drive_service, 
+                folders_query, 
+                "drive",
+                "nextPageToken, files(id, name, mimeType, modifiedTime)",
+                lambda response: (
+                    folders.extend(response.get("files", []))
                 )
-                
-                folders.extend(response.get("files", []))
-                page_token = response.get("nextPageToken", None)
-                
-                if not page_token:
-                    break
+            )
             
+    
             # Process and organize the results
             result = []
             for folder in folders:
+                # Get subfolders and their content modification time
+                children = get_folder_contents(folder["id"], depth + 1, max_depth)
+                latest_mod_time = google_drive_utils.get_content_modified_time(drive_service, folder["id"])
+                # Initialize with the latest direct file modification time
+                content_mod_time = latest_mod_time if latest_mod_time else folder.get("modifiedTime")   
+
+                # Check if any child folder has a more recent content modification time
+                if isinstance(children, list):
+                    for child in children:
+                        child_content_mod_time = child.get("contentModifiedTime")
+
+                        child_content_mod_time_object = datetime.fromisoformat(child_content_mod_time) if child_content_mod_time else None
+                        content_mod_time_object = datetime.fromisoformat(content_mod_time) if content_mod_time else None
+                        if child_content_mod_time and (child_content_mod_time_object > content_mod_time_object):
+                            content_mod_time = child_content_mod_time
+
                 result.append({
                     "id": folder["id"],
                     "name": folder["name"],
-                    "modifiedTime": folder.get("modifiedTime"),  
-                    "children": get_folder_contents(folder["id"], depth + 1, max_depth),  # Recursively get subfolders
+                    "modifiedTime": folder["modifiedTime"], 
+                    "contentModifiedTime": content_mod_time,  
+                    "children": children,  # Recursively get subfolders
                 })
+
             return result
         
         # Get the folder structure starting from the specified folder_id
@@ -382,6 +392,9 @@ async def get_folder_structure(request: Request, folder_id: Optional[str] = "roo
     except HTTPException:
         raise
     except Exception as e:
+        import traceback
+        print(f"Error retrieving folder structure: {str(e)}")
+        print(traceback.format_exc())
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/api/drive/index-meta")

@@ -94,6 +94,7 @@ export interface FileResult {
     id: string; 
     name: string; 
     modifiedTime: string;
+    contentModifiedTime: string;
     children: FolderStructureResponse[]
   }
 

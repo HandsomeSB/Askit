@@ -8,6 +8,7 @@ export interface Folder {
   name: string;
   children?: Folder[];
   modifiedTime: string;
+  contentModifiedTime: string;
   processed: boolean; 
 }
 
@@ -38,6 +39,7 @@ export class FolderMetaManager {
         name: folderStructObj.name,
         processed: false,
         modifiedTime: folderStructObj.modifiedTime,
+        contentModifiedTime: folderStructObj.contentModifiedTime,
         children: folderStructObj.children
           ? folderStructObj.children.map(transferData)
           : [],
@@ -47,6 +49,9 @@ export class FolderMetaManager {
     this.setFolders(folders);
     this._buildMetaMap(folderMeta);
     this._updateProcessedStateAll();
+
+    console.log(this.folderMap);
+    console.log(this.folderMetaMap);
   }
 
   /**
@@ -90,11 +95,11 @@ export class FolderMetaManager {
       const meta = this.folderMetaMap.get(key);
       const folder = this.folderMap.get(key);
 
-      const modifiedTime = new Date(folder?.modifiedTime || "");
+      const contentModifiedTime = new Date(folder?.contentModifiedTime || "");
       const indexedTime = new Date(meta?.time_indexed || "");
 
 
-      value.processed = (indexedTime >= modifiedTime);
+      value.processed = (indexedTime >= contentModifiedTime);
       this.folderMap.set(key, value);
     }
   }
