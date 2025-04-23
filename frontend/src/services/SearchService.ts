@@ -9,6 +9,8 @@ import {
   ProcessFolderResponse,
   QueryRequest,
   FileStructureResponse,
+  FolderStructureResponse,
+  IndexMetaResponse
 } from "../types/types";
 
 class SearchService {
@@ -96,10 +98,14 @@ class SearchService {
    */
   async getFolderStructure(
     folderId: string = "root"
-  ): Promise<Array<{ id: string; name: string; children: any[] }>> {
-    return this.request<Array<{ id: string; name: string; children: any[] }>>(
+  ): Promise<Array<FolderStructureResponse>> {
+    return this.request<Array<FolderStructureResponse>>(
       `/drive/folder-structure?folder_id=${folderId}`
     );
+  }
+
+  async getIndexMeta(folderId: string = "root"): Promise<Array<IndexMetaResponse>> {
+    return this.request<Array<IndexMetaResponse>>(`/drive/index-meta?folder_id=${folderId}`);
   }
 
   /**

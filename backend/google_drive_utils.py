@@ -1,8 +1,6 @@
 from document_processor import DocumentProcessor
 from fastapi import HTTPException
 
-
-
 def get_absolute_path(drive_service, folder_id):
     """
     Get the absolute path of a folder in Google Drive.
@@ -156,10 +154,62 @@ def index_folder(drive_service, document_indexer, folder_id, absolute_id_path=No
     response = {
         "status": "success",
         "message": f"Processed {total_files} items",
-        "index_id": "bro I have no clue what this is",
+        "index_id": "bro I have no clue what this is", # NOTE, fix
     }
     
     if failed_files:
         response["failed_files"] = failed_files
         
     return response, total_files
+
+def fileQueryLoop(drive_service, query, spaces, fields, loop_body : callable):
+    """
+    Loop through files in Google Drive based on a query.
+    Calls loop body within the while loop body.
+    """
+    page_token = None
+    while True:
+        response = (
+            drive_service.files()
+            .list(
+                q=query,
+                spaces=spaces,
+                fields=fields,
+                pageToken=page_token,
+            )
+            .execute()
+        )
+        
+        loop_body(response)
+
+        page_token = response.get("nextPageToken", None)
+        if not page_token:
+            break
+
+def get_content_modified_time(drive_service, folder_id):
+    """
+    Get the most recent modification time of any file in a folder.
+    """
+    
+    # Get the most recent modification time of any file in this folder
+    files_query = f"'{folder_id}' in parents and mimeType!='application/vnd.google-apps.folder' and trashed=false"
+    page_token = None
+    latest_mod_time = None
+    
+    response = (
+        drive_service.files()
+        .list(
+            q=files_query,
+            spaces="drive",
+            fields="nextPageToken, files(modifiedTime)",
+            orderBy="modifiedTime desc",  # Order by most recently modified
+            pageSize=1,  # We only need the most recent one
+            pageToken=page_token,
+        )
+        .execute()
+    )
+    files = response.get("files", [])
+    if files:
+        latest_mod_time = files[0].get("modifiedTime")
+
+    return latest_mod_time

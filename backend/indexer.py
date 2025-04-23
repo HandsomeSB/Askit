@@ -51,6 +51,7 @@ class DocumentIndexer:
 
         self.vector_store = SimpleVectorStore()
 
+    # NOTE, Use index.refresh_ref_docs
     def create_index(self, documents: List[Document], folder_id: str, absolute_id_path: str) -> VectorStoreIndex:
         """Convert documents to index and save to disk."""
         storage_context = StorageContext.from_defaults(vector_store=self.vector_store)
@@ -60,14 +61,18 @@ class DocumentIndexer:
         index = VectorStoreIndex(
             nodes, 
             storage_context=storage_context, 
-            embed_model=self.embedding_model
+            embed_model=self.embedding_model,
         )
 
-        index.metadata = {
+        # Save folder wise metadata
+        metadata = {
             "folder_id": folder_id,
             "absolute_path": absolute_id_path,
             "time_indexed": datetime.now().isoformat(),
         }
+
+        # NOTE, Change implementation for database
+        _save_metadata(metadata, absolute_id_path)
 
         index.storage_context.persist(persist_dir=self.persist_dir + f"/{absolute_id_path}")
         return index
@@ -88,6 +93,45 @@ class DocumentIndexer:
     
     def delete_index(self, folder_id: str) -> bool:
         pass
+
+    # NOTE, Change implementation for database
+    def get_index_structure(self, folder_id: str) -> List[Dict[str, Any]]:
+        """Get the index structure of the folder."""
+        start_path = _find_subdirectory(self.persist_dir, folder_id)
+        if not start_path:
+            raise FileNotFoundError(f"No index found for folder ID: {folder_id}")
+        return _get_index_structure(start_path)
+
+def _get_index_structure(start_path: str) -> List[Dict[str, Any]]:
+    """Get the index structure of the folder."""
+    result = []
+    if not os.path.exists(start_path):
+        return result
+
+    # Loop through all directories within the start path
+    for item in os.listdir(start_path):
+        item_path = os.path.join(start_path, item)
+
+        if os.path.isdir(item_path):
+            # Check for metadata file
+            metadata_path = os.path.join(item_path, "metadata.json")
+            metadata = {}
+            
+            if os.path.exists(metadata_path):
+                try:
+                    with open(metadata_path, "r") as f:
+                        metadata = json.load(f)
+                except json.JSONDecodeError:
+                    # Handle invalid metadata files
+                    pass
+            
+            # Create node for this directory
+            dir_info = metadata.copy()
+            dir_info["children"] = _get_index_structure(item_path)  # Recursively process subdirectories
+            
+            result.append(dir_info)
+
+    return result
 
 def _find_subdirectory(base_dir: str, target_dir: str) -> str:
     """
@@ -133,3 +177,9 @@ def _get_subindices(base_dir):
             subindices.extend(_get_subindices(path))
 
     return subindices
+
+def _save_metadata(metadata: Dict[str, Any], absolute_id_path: str):
+    """Save metadata to disk."""
+    os.makedirs(f"./storage/{absolute_id_path}", exist_ok=True)
+    with open(f"./storage/{absolute_id_path}/metadata.json", "w") as f:
+        json.dump(metadata, f)

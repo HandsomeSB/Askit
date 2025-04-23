@@ -89,3 +89,18 @@ export interface FileResult {
     folder_details: any;
     contents: FileResult[];
   }
+
+  export interface FolderStructureResponse {
+    id: string; 
+    name: string; 
+    modifiedTime: string;
+    contentModifiedTime: string;
+    children: FolderStructureResponse[]
+  }
+
+  export interface IndexMetaResponse {
+    folder_id: string;
+    absolute_id_path: string;
+    time_indexed: string;
+    children: IndexMetaResponse[];
+  }
