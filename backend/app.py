@@ -61,7 +61,7 @@ auth_states = {}
 try:
     document_processor = DocumentProcessor()
     document_indexer = DocumentIndexer()
-    query_engine = EnhancedQueryEngine(10, 0.5)
+    query_engine = EnhancedQueryEngine()
     print("Successfully initialized all components")
 except Exception as e:
     print(f"Error initializing components: {str(e)}")
