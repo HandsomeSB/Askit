@@ -86,7 +86,6 @@ export class FolderMetaManager {
   private _buildMetaMap = (folderMetas: IndexMetaResponse[]): void => {
     for (const meta of folderMetas) {
       this.folderMetaMap.set(meta.folder_id, meta);
-      this._buildMetaMap(meta.children || []);
     }
   }
 

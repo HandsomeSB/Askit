@@ -318,19 +318,21 @@ class EnhancedQueryEngine:
         return node_value == target_value
 
     def query(
-        self, query_text: str, folder_id: str
+        self, root_id: str, query_text: str, folder_id: str
     ) -> Tuple[str, List[Dict[str, Any]]]:
         # query_text, metadata_filters = self._extract_metadata_filters(query_text)
-        indices = self.document_indexer.get_index(folder_id)
-        
-        retrievers = [idx.as_retriever(
-            similarity_cutoff=self.similarity_threshold,
-        ) for idx in indices]
+        index = self.document_indexer.get_index(root_id)
 
-        retriever = QueryFusionRetriever(
-            retrievers,
+        # now list all documents:
+        for doc_id, doc in index.docstore.docs.items():
+            print(f"ID: {doc_id}")
+            print(f"Text: {doc.text[:200]}…")
+            print(f"Metadata: {doc.metadata}")
+        print("-" * 40)
+
+        retriever = index.as_retriever(
             similarity_top_k=self.top_k,
-            use_async=False,
+            similarity_cutoff=self.similarity_threshold,
         )
 
         results = retriever.retrieve(query_text)

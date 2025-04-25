@@ -174,6 +174,15 @@ async def auth_callback(request: Request):
         session_id = secrets.token_urlsafe(32)
         request.session["session_id"] = session_id
 
+        drive_service = await get_drive_service(request)
+
+        # Get root id
+        file = drive_service.files().get(
+            fileId="root",
+            fields="id"
+        ).execute()
+        request.session["root_id"] = file.get("id")
+
         print(request.session.get("user_id"))
         print(request.session.get("email"))
         
@@ -262,6 +271,7 @@ async def query(request: Request, query_request: QueryRequest):
         try:
             # Pass user ID (session_id) to restrict queries to user's own indices
             answer, sources = query_engine.query(
+                request.session["root_id"],
                 query_request.query, 
                 query_request.folder_id
             )
@@ -320,7 +330,6 @@ async def logout(request: Request):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error during logout: {str(e)}")
 
-# NOTE, folder modified time doesn't mean any of the files is modified. Its on new files or move files
 @app.get("/api/drive/folder-structure")
 async def get_folder_structure(request: Request, folder_id: Optional[str] = "root"):
     """
@@ -407,20 +416,8 @@ async def get_index_meta(request: Request, folder_id: Optional[str] = "root"):
     Returns a tree of indexed directories and index metadata.
     """
     try:
-        # Get the authenticated user's drive service
-        drive_service = await get_drive_service(request)
-
-        # If folder_id is "root", get the actual folder ID
-        if folder_id == "root":
-            # Fetch the root folder's actual ID
-            file = drive_service.files().get(
-                fileId="root",
-                fields="id"
-            ).execute()
-            folder_id = file.get("id")
-        
-        index = document_indexer.get_index_structure(folder_id)
-        return index
+        folder_structure = document_indexer.get_index_structure(request.session["root_id"])
+        return folder_structure
     except HTTPException:
         raise
     except Exception as e:
