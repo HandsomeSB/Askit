@@ -2,6 +2,8 @@ import os
 from typing import List, Dict, Any
 import json
 from dotenv import load_dotenv
+import pymongo
+from pymongo.operations import SearchIndexModel
 
 load_dotenv()
 
@@ -10,6 +12,10 @@ from llama_index.core.indices.loading import load_index_from_storage
 from llama_index.core.node_parser import SemanticSplitterNodeParser
 from llama_index.core.storage.storage_context import SimpleVectorStore
 from llama_index.embeddings.openai import OpenAIEmbedding
+from llama_index.vector_stores.mongodb import MongoDBAtlasVectorSearch
+from llama_index.core.ingestion import IngestionPipeline
+from llama_index.storage.docstore.mongodb import MongoDocumentStore
+
 
 import google_drive_utils
 from datetime import datetime
@@ -46,6 +52,7 @@ class DocumentIndexer:
             chunk_overlap=48, 
             embed_model=self.embedding_model
         )
+        self.mongo_client = pymongo.MongoClient(os.getenv("MONGODB_URI"))
 
         os.makedirs(persist_dir, exist_ok=True)
 
@@ -54,15 +61,76 @@ class DocumentIndexer:
     # NOTE, Use index.refresh_ref_docs
     def create_index(self, documents: List[Document], folder_id: str, absolute_id_path: str) -> VectorStoreIndex:
         """Convert documents to index and save to disk."""
-        storage_context = StorageContext.from_defaults(vector_store=self.vector_store)
-
-        nodes = self.node_parser.get_nodes_from_documents(documents)
-
-        index = VectorStoreIndex(
-            nodes, 
-            storage_context=storage_context, 
-            embed_model=self.embedding_model,
+        root_id = absolute_id_path.strip("/").split("/")[0]
+        vector_store = MongoDBAtlasVectorSearch(
+            self.mongo_client,
+            db_name = "llamaindex_db",
+            collection_name = root_id,
+            vector_index_name = "vector_index"
         )
+
+        storage_context = StorageContext.from_defaults(vector_store=vector_store)
+
+        collection = self.mongo_client["llamaindex_db"][root_id]
+        existing = list(collection.list_search_indexes())
+        # existing_names = { idx.document["name"] for idx in existing }
+        # print("Existing search indexes:", existing_names)
+        search_index_model = SearchIndexModel(
+            definition={
+                "fields": [
+                    {
+                        "type": "vector",
+                        "path": "embedding",
+                        "numDimensions": 1536,
+                        "similarity": "cosine"
+                    },
+                    {
+                        "type": "filter",
+                        "path": "metadata.absolute_path",
+                    }
+                ]
+            },
+            name="vector_index",
+            type="vectorSearch"
+            )
+        if search_index_model not in existing:
+            try:
+                collection.create_search_index(model=search_index_model)
+                print("Search index created successfully.")
+            except Exception as e:
+                print("Failed to create search index:", e)
+        else:
+            print(f"🔍 Search index {search_index_model.name} already exists – skipping.")
+        
+        for doc in documents:
+            doc.metadata["absolute_path"] = absolute_id_path
+
+        # nodes = self.node_parser.get_nodes_from_documents(documents)
+
+        # index = VectorStoreIndex(
+        #     nodes, 
+        #     storage_context=storage_context, 
+        #     embed_model=self.embedding_model,
+        #     show_progress=True,
+        # )
+        docstore = MongoDocumentStore.from_uri(
+            uri=os.getenv("MONGODB_URI"),
+            db_name="llamaindex_db",
+            namespace=root_id,
+        )
+
+        pipeline = IngestionPipeline(
+            transformations=[
+                self.node_parser,
+                OpenAIEmbedding(model_name="text-embedding-ada-002"),
+            ],
+            docstore=docstore,
+            vector_store=vector_store,
+            # <-- the magic bit:
+            docstore_strategy="upserts",
+        )
+
+        pipeline.run(documents=documents, show_progress=True)
 
         # Save folder wise metadata
         metadata = {
@@ -72,35 +140,47 @@ class DocumentIndexer:
         }
 
         # NOTE, Change implementation for database
-        _save_metadata(metadata, absolute_id_path)
+        # _save_metadata(metadata, absolute_id_path)
+        self.mongo_client["llamaindex_db"][f"{root_id}/index_metadata"].update_one(
+            {"folder_id": folder_id},  # filter to find document
+            {"$set": metadata},        # update with new metadata
+            upsert=True                # insert if not found
+        )
 
-        index.storage_context.persist(persist_dir=self.persist_dir + f"/{absolute_id_path}")
-        return index
+        # return index
 
-    def get_index(self, folder_id: str):
-        """Load index from disk. Return a list of indices."""
-        print(folder_id)
-        index_path = _find_subdirectory(self.persist_dir, folder_id)
-        print(index_path)
+    def get_index(self, root_id: str):
+        vector_store = MongoDBAtlasVectorSearch(
+            self.mongo_client,
+            db_name = "llamaindex_db",
+            collection_name = root_id,
+            vector_index_name = "vector_index"
+        )
 
-        storage_context = StorageContext.from_defaults(persist_dir=index_path)
-        index = load_index_from_storage(storage_context=storage_context)
+        # storage_context = StorageContext.from_defaults(vector_store=vector_store)
+        return VectorStoreIndex.from_vector_store(
+            vector_store,
+            embed_model=self.embedding_model,   # e.g. OpenAIEmbedding(model="text-embedding-ada-002")
+            show_progress=True                  # optional
+        )
 
-        subindices = _get_subindices(index_path)
-        subindices.append(index)
-        
-        return subindices
     
     def delete_index(self, folder_id: str) -> bool:
         pass
 
-    # NOTE, Change implementation for database
-    def get_index_structure(self, folder_id: str) -> List[Dict[str, Any]]:
+    def get_index_structure(self, root_id: str) -> List[Dict[str, Any]]:
         """Get the index structure of the folder."""
-        start_path = _find_subdirectory(self.persist_dir, folder_id)
-        if not start_path:
-            raise FileNotFoundError(f"No index found for folder ID: {folder_id}")
-        return _get_index_structure(start_path)
+        # Note: folder_id parameter may not be used if we're retrieving all metadata
+        collection = self.mongo_client["llamaindex_db"][f"{root_id}/index_metadata"]
+
+        documents = list(collection.find({}))
+        result = []
+        for doc in documents:
+            if "_id" in doc:
+                del doc["_id"]  # Remove MongoDB's internal ID
+            result.append(doc)
+        
+        return result
 
 def _get_index_structure(start_path: str) -> List[Dict[str, Any]]:
     """Get the index structure of the folder."""

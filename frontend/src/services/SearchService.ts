@@ -10,7 +10,7 @@ import {
   QueryRequest,
   FileStructureResponse,
   FolderStructureResponse,
-  IndexMetaResponse
+  IndexMetaResponse,
 } from "../types/types";
 
 class SearchService {

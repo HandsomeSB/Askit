@@ -121,7 +121,7 @@ class DocumentProcessor:
             "thumbnail_link": file_metadata.get("thumbnailLink"),
             "size": file_metadata.get("size"),
         }
-
+        ret_doc = None
         if mime_type in self.GOOGLE_DOC_MIMETYPES:
             file_data = self._export_google_file(file_id, mime_type)
         else:
@@ -131,16 +131,15 @@ class DocumentProcessor:
             if mime_type in self.GOOGLE_DOC_MIMETYPES:
                 processor_name = self.GOOGLE_DOC_MIMETYPES[mime_type]["processor"]
                 processor_func = getattr(self, processor_name)
-                return processor_func(file_data, base_metadata)
-
+                ret_doc = processor_func(file_data, base_metadata)
             # Check mime type and call appropriate processor
-            if mime_type.startswith('application/pdf'):
-                return self._process_pdf(file_data, base_metadata)
+            elif mime_type.startswith('application/pdf'):
+                ret_doc = self._process_pdf(file_data, base_metadata)
             elif mime_type in ['application/vnd.openxmlformats-officedocument.wordprocessingml.document']:
-                return self._process_docx(file_data, base_metadata)
+                ret_doc = self._process_docx(file_data, base_metadata)
             elif mime_type in ['application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 
                             'application/vnd.ms-excel']:
-                return self._process_excel(file_data, base_metadata)
+                ret_doc = self._process_excel(file_data, base_metadata)
             elif mime_type.startswith('image/'):
                 # Update metadata with image-specific info if available
                 if 'imageMediaMetadata' in file_metadata:
@@ -157,23 +156,31 @@ class DocumentProcessor:
                             'latitude': img_meta['location'].get('latitude'),
                             'longitude': img_meta['location'].get('longitude'),
                         })
-                return self._process_image(file_data, base_metadata)
+                ret_doc = self._process_image(file_data, base_metadata)
             elif mime_type.startswith('audio/'):
-                return self._process_audio(file_data, base_metadata)
+                ret_doc = self._process_audio(file_data, base_metadata)
             else:
                 # For other file types, do not process
                 # Return an empty list for unsupported file types
                 print(f"Unsupported file type: {mime_type} for file: {file_name}")
-                return [Document(
+                ret_doc = [Document(
                     text=f"[Unsupported file type: {mime_type}]",
                     metadata=base_metadata
                 )]
         except Exception as e:
             print(f"Error processing file {file_name}, {mime_type}: {e}")
-            return [Document(
+            ret_doc = [Document(
                 text=f"[Error processing file: {file_name}]",
                 metadata=base_metadata
             )]
+        
+        for i in range(len(ret_doc)):
+            # Update metadata for each document
+            # ret_doc[i].metadata.update(base_metadata)
+            # Set the document ID to the file ID
+            ret_doc[i].doc_id = file_id
+
+        return ret_doc
 
     def _export_google_file(self, file_id: str, mime_type: str) -> BinaryIO:
         """

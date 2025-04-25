@@ -123,7 +123,7 @@ def index_folder(drive_service, document_indexer, folder_id, absolute_id_path=No
         if not absolute_id_path:
             absolute_id_path = get_absolute_path_id(drive_service, folder_id)
         
-        index_id = document_indexer.create_index(documents, folder_id, absolute_id_path)
+        document_indexer.create_index(documents, folder_id, absolute_id_path)
     except Exception as index_error:
         print(f"Error creating index: {str(index_error)}")
         import traceback

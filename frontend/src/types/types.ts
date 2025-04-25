@@ -102,5 +102,4 @@ export interface FileResult {
     folder_id: string;
     absolute_id_path: string;
     time_indexed: string;
-    children: IndexMetaResponse[];
   }
