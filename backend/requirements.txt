@@ -16,7 +16,8 @@ llama-index-readers-file>=0.1.3
 llama-index-embeddings-openai>=0.1.2
 llama-index-llms-openai>=0.1.2
 llama-index-llms-gemini>=0.4.14
-llama_index.storage.docstore.mongodb>=0.1.2
+llama-index-storage-docstore-mongodb>=0.3.0
+llama-index-vector-stores-mongodb>=0.6.0
 
 
 # Document processing
