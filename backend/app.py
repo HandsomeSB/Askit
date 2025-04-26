@@ -29,10 +29,11 @@ import google_drive_utils
 
 app = FastAPI(title="Document Retrieval System")
 
+FRONTEND_URL = os.getenv("FRONTEND_URL")
 # Add CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["https://askit-iota.vercel.app"],  # Frontend URL
+    allow_origins=[FRONTEND_URL],  # Frontend URL
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -115,7 +116,7 @@ async def get_auth_url(request: Request):
             "https://www.googleapis.com/auth/userinfo.profile",
             "https://www.googleapis.com/auth/userinfo.email"
         ],
-        redirect_uri="http://localhost:3000/auth/callback"  # Frontend URL
+        redirect_uri=f"{FRONTEND_URL}/auth/callback"  # Frontend URL
     )
     
     # Get authorization URL with state parameter
@@ -154,7 +155,7 @@ async def auth_callback(request: Request):
             "https://www.googleapis.com/auth/userinfo.profile",
             "https://www.googleapis.com/auth/userinfo.email"
         ],
-        redirect_uri="http://localhost:3000/auth/callback"  # Frontend URL
+        redirect_uri=f"{FRONTEND_URL}/auth/callback"  # Frontend URL
     )
     
     # Exchange authorization code for tokens
