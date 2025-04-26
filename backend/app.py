@@ -86,6 +86,9 @@ class QueryResponse(BaseModel):
 class ProcessFolderRequest(BaseModel):
     folder_id: str
 
+@app.get("/", include_in_schema=False)
+async def _health_check():
+    return {"status": "ok"}
 
 # OAuth Endpoints for Frontend Authentication Flow
 @app.get("/api/auth/google-url")
