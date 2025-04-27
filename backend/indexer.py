@@ -62,82 +62,83 @@ class DocumentIndexer:
     def create_index(self, documents: List[Document], folder_id: str, absolute_id_path: str) -> VectorStoreIndex:
         """Convert documents to index and save to disk."""
         root_id = absolute_id_path.strip("/").split("/")[0]
-        vector_store = MongoDBAtlasVectorSearch(
-            self.mongo_client,
-            db_name = "llamaindex_db",
-            collection_name = root_id,
-            vector_index_name = "vector_index"
-        )
-
-        storage_context = StorageContext.from_defaults(vector_store=vector_store)
-
-        collection = self.mongo_client["llamaindex_db"][root_id]
-        existing = list(collection.list_search_indexes())
-        # existing_names = { idx.document["name"] for idx in existing }
-        # print("Existing search indexes:", existing_names)
-        search_index_model = SearchIndexModel(
-            definition={
-                "fields": [
-                    {
-                        "type": "vector",
-                        "path": "embedding",
-                        "numDimensions": 1536,
-                        "similarity": "cosine"
-                    },
-                    {
-                        "type": "filter",
-                        "path": "metadata.absolute_path",
-                    }
-                ]
-            },
-            name="vector_index",
-            type="vectorSearch"
+        if documents:
+            vector_store = MongoDBAtlasVectorSearch(
+                self.mongo_client,
+                db_name = "llamaindex_db",
+                collection_name = root_id,
+                vector_index_name = "vector_index"
             )
-        if search_index_model not in existing:
-            try:
-                collection.create_search_index(model=search_index_model)
-                print("Search index created successfully.")
-            except Exception as e:
-                print("Failed to create search index:", e)
-        else:
-            print(f"🔍 Search index {search_index_model.name} already exists – skipping.")
-        
-        for doc in documents:
-            doc.metadata["absolute_path"] = absolute_id_path
 
-        # nodes = self.node_parser.get_nodes_from_documents(documents)
+            storage_context = StorageContext.from_defaults(vector_store=vector_store)
 
-        # index = VectorStoreIndex(
-        #     nodes, 
-        #     storage_context=storage_context, 
-        #     embed_model=self.embedding_model,
-        #     show_progress=True,
-        # )
-        docstore = MongoDocumentStore.from_uri(
-            uri=os.getenv("MONGODB_URI"),
-            db_name="llamaindex_db",
-            namespace=root_id,
-        )
+            collection = self.mongo_client["llamaindex_db"][root_id]
+            existing = list(collection.list_search_indexes())
+            # existing_names = { idx.document["name"] for idx in existing }
+            # print("Existing search indexes:", existing_names)
+            search_index_model = SearchIndexModel(
+                definition={
+                    "fields": [
+                        {
+                            "type": "vector",
+                            "path": "embedding",
+                            "numDimensions": 1536,
+                            "similarity": "cosine"
+                        },
+                        {
+                            "type": "filter",
+                            "path": "metadata.absolute_path",
+                        }
+                    ]
+                },
+                name="vector_index",
+                type="vectorSearch"
+                )
+            if search_index_model not in existing:
+                try:
+                    collection.create_search_index(model=search_index_model)
+                    print("Search index created successfully.")
+                except Exception as e:
+                    print("Failed to create search index:", e)
+            else:
+                print(f"🔍 Search index {search_index_model.name} already exists – skipping.")
+            
+            for doc in documents:
+                doc.metadata["absolute_path"] = absolute_id_path
 
-        pipeline = IngestionPipeline(
-            transformations=[
-                self.node_parser,
-                OpenAIEmbedding(model_name="text-embedding-ada-002"),
-            ],
-            docstore=docstore,
-            vector_store=vector_store,
-            # <-- the magic bit:
-            docstore_strategy="upserts",
-        )
+            # nodes = self.node_parser.get_nodes_from_documents(documents)
 
-        pipeline.run(documents=documents, show_progress=True)
+            # index = VectorStoreIndex(
+            #     nodes, 
+            #     storage_context=storage_context, 
+            #     embed_model=self.embedding_model,
+            #     show_progress=True,
+            # )
+            docstore = MongoDocumentStore.from_uri(
+                uri=os.getenv("MONGODB_URI"),
+                db_name="llamaindex_db",
+                namespace=root_id,
+            )
 
-        # Save folder wise metadata
-        metadata = {
-            "folder_id": folder_id,
-            "absolute_path": absolute_id_path,
-            "time_indexed": datetime.now().isoformat(),
-        }
+            pipeline = IngestionPipeline(
+                transformations=[
+                    self.node_parser,
+                    OpenAIEmbedding(model_name="text-embedding-ada-002"),
+                ],
+                docstore=docstore,
+                vector_store=vector_store,
+                # <-- the magic bit:
+                docstore_strategy="upserts",
+            )
+
+            pipeline.run(documents=documents, show_progress=True)
+
+            # Save folder wise metadata
+            metadata = {
+                "folder_id": folder_id,
+                "absolute_path": absolute_id_path,
+                "time_indexed": datetime.now().isoformat(),
+            }
 
         # NOTE, Change implementation for database
         # _save_metadata(metadata, absolute_id_path)

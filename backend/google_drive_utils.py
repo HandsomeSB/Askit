@@ -113,10 +113,16 @@ def index_folder(drive_service, document_indexer, folder_id, absolute_id_path=No
         error_message = "No documents were successfully processed from the folder."
         if failed_files:
             error_message += f" Failed files: {', '.join(failed_files)}"
-        raise HTTPException(
-            status_code=500,
-            detail=error_message
-        )
+            raise HTTPException(
+                status_code=500,
+                detail=error_message
+            )
+        response = {
+            "status": "success",
+            "message": f"Processed 0 items",
+            "index_id": "bro I have no clue what this is", # NOTE, fix
+        }
+        return response, 0
     
     # Create index from documents
     try:
