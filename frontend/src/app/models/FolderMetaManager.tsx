@@ -95,7 +95,7 @@ export class FolderMetaManager {
       const folder = this.folderMap.get(key);
 
       const contentModifiedTime = new Date(folder?.contentModifiedTime || "");
-      const indexedTime = new Date(meta?.time_indexed || "");
+      const indexedTime = new Date(meta?.time_indexed + 'Z' || "");
 
 
       value.processed = (indexedTime >= contentModifiedTime);
