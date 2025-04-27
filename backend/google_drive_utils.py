@@ -74,10 +74,12 @@ def index_folder(drive_service, document_indexer, folder_id, absolute_id_path=No
     try:
         files = user_document_processor.get_files_from_drive(folder_id)
         if not files:
-            raise HTTPException(
-                status_code=400,
-                detail="No files found in the specified folder"
-            )
+            response = {
+                "status": "success",
+                "message": f"Processed 0 items",
+                "index_id": "bro I have no clue what this is", # NOTE, fix
+            }
+            return response, 0
     except Exception as drive_error:
         print(f"Error accessing Google Drive: {str(drive_error)}")
         import traceback
