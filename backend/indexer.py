@@ -133,12 +133,12 @@ class DocumentIndexer:
 
             pipeline.run(documents=documents, show_progress=True)
 
-            # Save folder wise metadata
-            metadata = {
-                "folder_id": folder_id,
-                "absolute_path": absolute_id_path,
-                "time_indexed": datetime.now().isoformat(),
-            }
+        # Save folder wise metadata
+        metadata = {
+            "folder_id": folder_id,
+            "absolute_path": absolute_id_path,
+            "time_indexed": datetime.now().isoformat(),
+        }
 
         # NOTE, Change implementation for database
         # _save_metadata(metadata, absolute_id_path)
